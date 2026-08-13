@@ -1,17 +1,44 @@
+require("dotenv").config();
+
 const express = require("express");
 const mongoose = require("mongoose");
 const cors = require("cors");
+const session = require("express-session");
+const { MongoStore } = require("connect-mongo");
+const passport = require("./config/passport");
 
 const app = express();
-
-app.use(cors());
-app.use(express.json());
 
 const PORT = process.env.PORT || 5000;
 
 const MONGO_URI =
   process.env.MONGO_URI ||
   "mongodb://localhost:27017/fullstack_db";
+
+app.use(
+  cors({
+    origin: process.env.FRONTEND_URL || "http://localhost:3000",
+    credentials: true,
+  })
+);
+app.use(express.json());
+
+app.use(
+  session({
+    secret: process.env.SESSION_SECRET,
+    resave: false,
+    saveUninitialized: false,
+    store: MongoStore.create({ mongoUrl: MONGO_URI }),
+    cookie: {
+      maxAge: 1000 * 60 * 60 * 24 * 7, // 7 days
+    },
+  })
+);
+app.use(passport.initialize());
+app.use(passport.session());
+
+const authRoutes = require("./routes/auth");
+app.use("/auth", authRoutes);
 
 const User = require("./models/User");
 

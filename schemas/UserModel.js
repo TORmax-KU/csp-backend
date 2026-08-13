@@ -1,15 +1,19 @@
-import mongoose from "mongoose";
+const mongoose = require("mongoose");
 
-export const UserSchema = new mongoose.Schema({
+const UserSchema = new mongoose.Schema({
+    googleId: {
+        type: String,
+        unique: true,
+        sparse: true,
+    },
     username: {
         type: String,
-        unique: [true, "This username already exists"],
-        required: [true, "Username is required"],
+        unique: true,
+        sparse: true,
         trim: true,
     },
     realName: {
         type: String,
-        required: [true, "Real name is required"],
         trim: true,
     },
     email: {
@@ -19,16 +23,13 @@ export const UserSchema = new mongoose.Schema({
         lowercase: true,
         trim: true,
     },
-    passwordHash: {
-        type: String,
-        required: [true, "Password is required"],
-    },
     aboutMe: {
         type: String,
         default: "",
     },
     proficiency: {
-        type: [String],
+        type: [mongoose.Schema.Types.ObjectId],
+        ref: "Skill",
         default: [],
     },
     associations: {
@@ -39,3 +40,5 @@ export const UserSchema = new mongoose.Schema({
     collection: "users",
     timestamps: true,
 });
+
+module.exports = { UserSchema };
