@@ -1,17 +1,5 @@
 import mongoose from "mongoose";
 
-const ProficiencySchema = new mongoose.Schema({
-    skill: {
-        type: String,
-        required: [true, "Skill name is required"],
-    },
-    level: {
-        type: String,
-        enum: ["Beginner", "Intermediate", "Advanced", "Expert"],
-        required: [true, "Proficiency level is required"],
-    },
-}, { _id: false });
-
 export const UserSchema = new mongoose.Schema({
     username: {
         type: String,
@@ -40,7 +28,7 @@ export const UserSchema = new mongoose.Schema({
         default: "",
     },
     proficiency: {
-        type: [ProficiencySchema],
+        type: [String],
         default: [],
     },
     associations: {
