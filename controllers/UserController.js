@@ -1,181 +1,90 @@
-/* example
+const User = require("../src/models/User");
 
-const { createConnection } = require("../utils/mongo");
-const { ProductSchema } = require("../schemas/ProductModel")
-const { SupplierSchema } = require("../schemas/SupplierModel");
-const { CategorySchema } = require("../schemas/CategoryModel");
+const EDITABLE_FIELDS = ["username", "realName", "aboutMe", "proficiency", "associations"];
 
-// Create
-const create = async (req, res) => {
-  try {
-    const conn = createConnection();
-    const Product = conn.model("Product", ProductSchema);
-
-    const productData = new Product(req.body);
-    const savedProduct = await productData.save();
-
-    await conn.close();
-    res.status(200).json(savedProduct);
-  } catch (error) {
-    console.error("Create product error:", error);
-    res.status(500).json({ error: "Something went wrong while creating product" });
-  }
-};
-
-// Read (fetch all or search by role_name)
 const fetch = async (req, res) => {
   try {
-    const conn = createConnection();
-    const Product = conn.model("Product", ProductSchema);
-    const Supplier = conn.model("Supplier", SupplierSchema);
-    const Category = conn.model("Category", CategorySchema);
-
     const { search, page = 1, limit = 10 } = req.query;
 
-    // Build query
     let query = {};
     if (search) {
-      query.product_name = { $regex: search, $options: "i" };
+      const regex = { $regex: search, $options: "i" };
+      query = { $or: [{ username: regex }, { realName: regex }, { email: regex }] };
     }
 
-    // Apply pagination
-    const products = await Product.find(query)
-      .populate("supplier_id") // optional: include supplier details
-      .populate("category_id") // optional: include category details
-      .skip((page - 1) * Number(limit))
-      .limit(Number(limit));
+    const [users, total] = await Promise.all([
+      User.find(query)
+        .skip((page - 1) * Number(limit))
+        .limit(Number(limit)),
+      User.countDocuments(query),
+    ]);
 
-    // Count total matching documents
-    const total = await Product.countDocuments(query);
-
-    conn.close();
-    res.status(200).json({ products, total });
+    res.status(200).json({ users, total });
   } catch (error) {
-    console.error("Fetch products error:", error);
-    res.status(500).json({ error: "Server error while fetching products" });
+    console.error("Fetch users error:", error);
+    res.status(500).json({ error: "Server error while fetching users" });
   }
 };
-
-//query 2
-const fetchProductByName = async (req, res) => {
-  try {
-    const conn = createConnection();
-    const Product = conn.model("Product", ProductSchema);
-
-    const { pName } = req.params;
-    const products = await Product.find({ "product_name": { $regex: pName, $options: "i" } },
-      { _id: 0, product_name: 1, quantity: 1, price: 1 });
-    conn.close();
-
-    res.status(200).json(products);
-
-  } catch (error) {
-    console.error("Fetch products error:", error);
-    res.status(500).json({
-      error: "Server error while fetching products",
-    });
-  }
-}
-
-//query 4
-const fetchIsLowQuantity = async (req, res) => {
-  try {
-    const conn = createConnection();
-    const Product = conn.model("Product", ProductSchema);
-
-    const amount = Number(req.params.amount);
-    const pName = req.params.name;
-
-    const products = await Product.find({
-      quantity: { $lte: amount },
-      product_name: { $regex: new RegExp(pName, "i") },
-    });
-
-    await conn.close();
-    return res.status(200).json(products);
-  } catch (error) {
-    console.error("Fetch products error:", error);
-    return res.status(500).json({ error: "Server error while fetching products" });
-  }
-};
-
-
-// Update Product
-const update = async (req, res) => {
-  const conn = createConnection();
-  try {
-    //hello
-    const Product = conn.model("Product", ProductSchema);
-    const Supplier = conn.model("Supplier", SupplierSchema);
-    const Category = conn.model("Category", CategorySchema);
-    const { id } = req.params;
-
-    // Check existence
-    const productExist = await Product.findById(id);
-    if (!productExist) {
-      return res.status(404).json({ message: "Product Not Found" });
-    }
-
-    // Update with validation
-    const updatedProduct = await Product.findByIdAndUpdate(
-      id,
-      req.body,
-      { new: true, runValidators: true }
-    );
-
-    // get 
-    const updated_product = await Product.findById(id).populate('supplier_id').populate('category_id')
-
-    return res.status(200).json(updated_product);
-  } catch (error) {
-    console.error("Update product error:", error);
-    return res.status(500).json({ error: "Something went wrong while updating product" });
-  } finally {
-    await conn.close();
-  }
-};
-
-// Delete Product
-const deleteProduct = async (req, res) => {
-  const conn = createConnection();
-  try {
-    const Product = conn.model("Product", ProductSchema);
-    const { id } = req.params;
-
-    // Check existence
-    const productExist = await Product.findById(id);
-    if (!productExist) {
-      return res.status(404).json({ message: "Product Not Found" });
-    }
-
-    // Delete
-    await Product.findByIdAndDelete(id);
-
-    // Success response
-    return res.status(200).json({ message: "Product Deleted" });
-  } catch (error) {
-    console.error("Delete product error:", error);
-    return res.status(500).json({ error: "Something went wrong while deleting product" });
-  } finally {
-    await conn.close();
-  }
-};
-
 
 const fetchById = async (req, res) => {
   try {
-    const conn = createConnection();
-    const Product = conn.model("Product", ProductSchema);
-    const { id } = req.params;
+    const user = await User.findById(req.params.id).populate("proficiency");
+    if (!user) return res.status(404).json({ message: "User not found" });
 
-    const product = await Product.findById(id);
-
-    await conn.close();
-    res.status(200).json(product);
+    res.status(200).json(user);
   } catch (error) {
-    console.error("Fetch product error:", error);
-    res.status(500).json({ error: "Server error while fetching product" });
+    console.error("Fetch user error:", error);
+    res.status(500).json({ error: "Server error while fetching user" });
   }
 };
 
-module.exports = { create, fetch, fetchById, update, deleteProduct, fetchProductByName, fetchIsLowQuantity };*/
+const update = async (req, res) => {
+  try {
+    const { id } = req.params;
+
+    // only the owner can edit their own profile
+    if (req.user._id.toString() !== id) {
+      return res.status(403).json({ message: "Forbidden" });
+    }
+
+    const user = await User.findById(id);
+    if (!user) return res.status(404).json({ message: "User not found" });
+
+    const patch = {};
+    for (const field of EDITABLE_FIELDS) {
+      if (req.body[field] !== undefined) patch[field] = req.body[field];
+    }
+
+    const updated = await User.findByIdAndUpdate(id, patch, {
+      new: true,
+      runValidators: true,
+    }).populate("proficiency");
+
+    res.status(200).json(updated);
+  } catch (error) {
+    console.error("Update user error:", error);
+    res.status(500).json({ error: "Something went wrong while updating user" });
+  }
+};
+
+const deleteUser = async (req, res) => {
+  try {
+    const { id } = req.params;
+
+    // only the owner can delete their own account
+    if (req.user._id.toString() !== id) {
+      return res.status(403).json({ message: "Forbidden" });
+    }
+
+    const user = await User.findById(id);
+    if (!user) return res.status(404).json({ message: "User not found" });
+
+    await User.findByIdAndDelete(id);
+    res.status(200).json({ message: "User deleted" });
+  } catch (error) {
+    console.error("Delete user error:", error);
+    res.status(500).json({ error: "Something went wrong while deleting user" });
+  }
+};
+
+module.exports = { fetch, fetchById, update, deleteUser };

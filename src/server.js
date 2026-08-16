@@ -38,9 +38,9 @@ app.use(passport.initialize());
 app.use(passport.session());
 
 const authRoutes = require("./routes/auth");
+const userRoutes = require("./routes/user");
 app.use("/auth", authRoutes);
-
-const User = require("./models/User");
+app.use("/api/users", userRoutes);
 
 mongoose
   .connect(MONGO_URI)
@@ -61,33 +61,6 @@ app.get("/api/hello", (req, res) => {
   res.json({
     message: "Hello from Express!",
   });
-});
-
-app.get("/api/users", async (req, res) => {
-  try {
-    const users = await User.find();
-
-    res.json(users);
-  } catch (error) {
-    res.status(500).json({
-      message: error.message,
-    });
-  }
-});
-
-app.post("/api/users", async (req, res) => {
-  try {
-    const user = await User.create({
-      name: req.body.name,
-      email: req.body.email,
-    });
-
-    res.status(201).json(user);
-  } catch (error) {
-    res.status(400).json({
-      message: error.message,
-    });
-  }
 });
 
 app.listen(PORT, () => {
