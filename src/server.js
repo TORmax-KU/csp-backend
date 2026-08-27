@@ -39,8 +39,17 @@ app.use(passport.session());
 
 const authRoutes = require("./routes/auth");
 const userRoutes = require("./routes/user");
+const projectRoutes = require("./routes/project");
+const notificationRoutes = require("./routes/notification");
+const adminRoutes = require("./routes/admin");
+const skillRoutes = require("./routes/skill");
+
 app.use("/auth", authRoutes);
 app.use("/api/users", userRoutes);
+app.use("/api/projects", projectRoutes);
+app.use("/api/notifications", notificationRoutes);
+app.use("/api/admin", adminRoutes);
+app.use("/api/skills", skillRoutes);
 
 mongoose
   .connect(MONGO_URI)
