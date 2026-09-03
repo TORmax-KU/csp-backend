@@ -62,6 +62,65 @@ const UserSchema = new mongoose.Schema({
         type: [String],
         default: [],
     },
+    companyName: {
+        type: String,
+        trim: true,
+        default: "",
+    },
+    taxId: {
+        type: String,
+        trim: true,
+        default: "",
+    },
+    registeredCapital: {
+        type: String,
+        trim: true,
+        default: "",
+    },
+    yearsInBusiness: {
+        type: Number,
+        min: 0,
+    },
+    iso27001: {
+        type: Boolean,
+        default: false,
+    },
+    iso9001: {
+        type: Boolean,
+        default: false,
+    },
+    iso20000: {
+        type: Boolean,
+        default: false,
+    },
+    nbtcLicense: {
+        type: Boolean,
+        default: false,
+    },
+    trackedKeywords: {
+        type: String,
+        trim: true,
+        default: "",
+    },
+    matchThreshold: {
+        type: Number,
+        min: 50,
+        max: 95,
+        default: 75,
+    },
+    dailyDigestEmail: {
+        type: Boolean,
+        default: true,
+    },
+    smsAlerts: {
+        type: Boolean,
+        default: false,
+    },
+    contactPhone: {
+        type: String,
+        trim: true,
+        default: "",
+    },
 }, {
     collection: "users",
     timestamps: true,

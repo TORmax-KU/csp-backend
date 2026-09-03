@@ -1,6 +1,25 @@
 const User = require("../src/models/User");
 
-const EDITABLE_FIELDS = ["username", "realName", "aboutMe", "proficiency", "associations"];
+const EDITABLE_FIELDS = [
+  "username",
+  "realName",
+  "aboutMe",
+  "proficiency",
+  "associations",
+  "companyName",
+  "taxId",
+  "registeredCapital",
+  "yearsInBusiness",
+  "iso27001",
+  "iso9001",
+  "iso20000",
+  "nbtcLicense",
+  "trackedKeywords",
+  "matchThreshold",
+  "dailyDigestEmail",
+  "smsAlerts",
+  "contactPhone",
+];
 
 const fetch = async (req, res) => {
   try {
@@ -62,6 +81,11 @@ const update = async (req, res) => {
 
     res.status(200).json(updated);
   } catch (error) {
+    if (error.name === "ValidationError") {
+      const messages = Object.values(error.errors).map((e) => e.message);
+      return res.status(400).json({ error: messages.join(", ") });
+    }
+
     console.error("Update user error:", error);
     res.status(500).json({ error: "Something went wrong while updating user" });
   }
