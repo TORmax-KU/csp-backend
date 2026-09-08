@@ -41,6 +41,38 @@ const ProjectSchema = new mongoose.Schema({
         type: String,
         trim: true,
     },
+    source: {
+        type: String,
+        trim: true,
+    },
+    externalId: {
+        type: String,
+        trim: true,
+    },
+    sourceStatus: {
+        type: String,
+        trim: true,
+    },
+    classification: {
+        type: String,
+        enum: ["software", "non-software", "unclassified"],
+        default: "unclassified",
+    },
+    classificationMethod: {
+        type: String,
+        trim: true,
+    },
+    matchedKeywords: {
+        type: [String],
+        default: [],
+    },
+    lastScrapedAt: {
+        type: Date,
+    },
+    rawData: {
+        type: mongoose.Schema.Types.Mixed,
+        default: null,
+    },
     publisherId: {
         type: mongoose.Schema.Types.ObjectId,
         ref: "User",
@@ -53,5 +85,10 @@ const ProjectSchema = new mongoose.Schema({
     collection: "projects",
     timestamps: true,
 });
+
+ProjectSchema.index(
+    { source: 1, externalId: 1 },
+    { unique: true, sparse: true }
+);
 
 module.exports = { ProjectSchema };

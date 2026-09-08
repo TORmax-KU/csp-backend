@@ -6,6 +6,13 @@ const IngestionLogSchema = new mongoose.Schema({
         required: true,
         trim: true,
     },
+    sourceUrl: {
+        type: String,
+        trim: true,
+    },
+    budgetYear: {
+        type: Number,
+    },
     status: {
         type: String,
         enum: ["Success", "Failed"],
@@ -14,6 +21,37 @@ const IngestionLogSchema = new mongoose.Schema({
     torsIngested: {
         type: Number,
         default: 0,
+    },
+    projectsCreated: {
+        type: Number,
+        default: 0,
+    },
+    projectsUpdated: {
+        type: Number,
+        default: 0,
+    },
+    projectsSkipped: {
+        type: Number,
+        default: 0,
+    },
+    projectsFiltered: {
+        type: Number,
+        default: 0,
+    },
+    projectsFailed: {
+        type: Number,
+        default: 0,
+    },
+    durationMs: {
+        type: Number,
+    },
+    filterVersion: {
+        type: String,
+        default: "software-keywords-v1",
+    },
+    filterUsed: {
+        type: mongoose.Schema.Types.Mixed,
+        default: null,
     },
     aiTokensUsed: {
         type: Number,
