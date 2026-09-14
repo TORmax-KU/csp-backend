@@ -5,6 +5,7 @@ const ModerationLog = require("../src/models/ModerationLog");
 const IngestionLog = require("../src/models/IngestionLog");
 const Notification = require("../src/models/Notification");
 const Match = require("../src/models/Match");
+const { runBangkokEgpIngestion } = require("../src/services/RunBangkokEgpIngestion");
 
 // FR-14 / Use Case 5: remove a violating post and auto-disable the publisher
 const moderatePost = async (req, res) => {
@@ -101,6 +102,33 @@ const fetchIngestionLogs = async (req, res) => {
   }
 };
 
+const triggerBangkokEgpIngestion = (req, res) => {
+  const budgetYear = Number(req.body?.budgetYear || 2569);
+  const page = Number(req.body?.page || 1);
+  const limit = Number(req.body?.limit || 100);
+
+  if (!Number.isInteger(budgetYear) || budgetYear < 2500 || budgetYear > 3000) {
+    return res.status(400).json({ message: "budgetYear must be a valid Buddhist calendar year" });
+  }
+  if (!Number.isInteger(page) || page < 1 || !Number.isInteger(limit) || limit < 1 || limit > 500) {
+    return res.status(400).json({ message: "page must be positive and limit must be between 1 and 500" });
+  }
+
+  const startedAt = new Date();
+  runBangkokEgpIngestion({ budgetYear, page, limit }).catch((error) => {
+    console.error("Bangkok EGP ingestion error:", error);
+  });
+
+  return res.status(202).json({
+    message: "Bangkok EGP ingestion started",
+    source: "bangkok-egp",
+    budgetYear,
+    page,
+    limit,
+    startedAt,
+  });
+};
+
 const setUserStatus = async (req, res) => {
   try {
     const { id } = req.params;
@@ -126,4 +154,10 @@ const setUserStatus = async (req, res) => {
   }
 };
 
-module.exports = { moderatePost, fetchModerationLogs, fetchIngestionLogs, setUserStatus };
+module.exports = {
+  moderatePost,
+  fetchModerationLogs,
+  fetchIngestionLogs,
+  triggerBangkokEgpIngestion,
+  setUserStatus,
+};
