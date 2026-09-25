@@ -70,9 +70,9 @@ const ingestRecords = async ({
       }).select("_id");
 
       if (existing) {
+        const { publisherId, ...updateFields } = project;
         await Project.findByIdAndUpdate(existing._id, {
-          $set: project,
-          $setOnInsert: { publisherId: null },
+          $set: updateFields,
         }, { runValidators: true });
         counters.projectsUpdated += 1;
       } else {
