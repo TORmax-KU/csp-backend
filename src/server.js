@@ -43,6 +43,7 @@ const projectRoutes = require("./routes/project");
 const notificationRoutes = require("./routes/notification");
 const adminRoutes = require("./routes/admin");
 const skillRoutes = require("./routes/skill");
+const { startIngestionScheduler } = require("./services/IngestionScheduler");
 
 app.use("/auth", authRoutes);
 app.use("/api/users", userRoutes);
@@ -55,6 +56,7 @@ mongoose
   .connect(MONGO_URI)
   .then(() => {
     console.log("Connected to MongoDB");
+    startIngestionScheduler();
   })
   .catch((error) => {
     console.error("MongoDB connection error:", error);
