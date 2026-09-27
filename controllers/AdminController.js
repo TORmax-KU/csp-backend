@@ -105,17 +105,24 @@ const fetchIngestionLogs = async (req, res) => {
 const triggerBangkokEgpIngestion = (req, res) => {
   const budgetYear = Number(req.body?.budgetYear || 2569);
   const page = Number(req.body?.page || 1);
+  const pages = Number(req.body?.pages || 1);
   const limit = Number(req.body?.limit || 100);
 
   if (!Number.isInteger(budgetYear) || budgetYear < 2500 || budgetYear > 3000) {
     return res.status(400).json({ message: "budgetYear must be a valid Buddhist calendar year" });
   }
-  if (!Number.isInteger(page) || page < 1 || !Number.isInteger(limit) || limit < 1 || limit > 500) {
-    return res.status(400).json({ message: "page must be positive and limit must be between 1 and 500" });
+  if (
+    !Number.isInteger(page) || page < 1 ||
+    !Number.isInteger(pages) || pages < 1 || pages > 100 ||
+    !Number.isInteger(limit) || limit < 1 || limit > 500
+  ) {
+    return res.status(400).json({
+      message: "page must be positive, pages must be between 1 and 100, and limit must be between 1 and 500",
+    });
   }
 
   const startedAt = new Date();
-  runBangkokEgpIngestion({ budgetYear, page, limit }).catch((error) => {
+  runBangkokEgpIngestion({ budgetYear, page, pages, limit }).catch((error) => {
     console.error("Bangkok EGP ingestion error:", error);
   });
 
@@ -124,6 +131,7 @@ const triggerBangkokEgpIngestion = (req, res) => {
     source: "bangkok-egp",
     budgetYear,
     page,
+    pages,
     limit,
     startedAt,
   });

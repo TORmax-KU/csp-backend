@@ -44,6 +44,7 @@ const notificationRoutes = require("./routes/notification");
 const adminRoutes = require("./routes/admin");
 const skillRoutes = require("./routes/skill");
 const { startIngestionScheduler } = require("./services/IngestionScheduler");
+const { startTorAnalysisWorker } = require("./services/TorAnalysisWorker");
 
 app.use("/auth", authRoutes);
 app.use("/api/users", userRoutes);
@@ -57,6 +58,7 @@ mongoose
   .then(() => {
     console.log("Connected to MongoDB");
     startIngestionScheduler();
+    startTorAnalysisWorker();
   })
   .catch((error) => {
     console.error("MongoDB connection error:", error);

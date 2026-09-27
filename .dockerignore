@@ -1,5 +1,7 @@
 node_modules
+.git
 .env
 *credentials*.json
 *service-account*.json
-tmp/
+npm-debug.log*
+tmp

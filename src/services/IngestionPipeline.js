@@ -67,10 +67,15 @@ const ingestRecords = async ({
       const existing = await Project.findOne({
         source: project.source,
         externalId: project.externalId,
-      }).select("_id");
+      }).select("_id sourceUrl");
 
       if (existing) {
         const { publisherId, ...updateFields } = project;
+        if (existing.sourceUrl !== project.sourceUrl) {
+          Object.assign(updateFields, { analysisStatus: "pending", descriptions: "", requiredSkills: [],
+            aiAnalysis: {}, analysisError: "", analysisErrorCode: "", analysisRetryCount: 0, nextAnalysisAt: null,
+            analysisLease: null, analysisLeaseUntil: null, analyzedAt: null });
+        }
         await Project.findByIdAndUpdate(existing._id, {
           $set: updateFields,
         }, { runValidators: true });

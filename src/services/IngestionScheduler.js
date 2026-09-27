@@ -3,6 +3,7 @@ const { runBangkokEgpIngestion } = require("./RunBangkokEgpIngestion");
 
 // TEMP for testing: every 2 minutes (revert to "0 */6 * * *" afterward)
 const DEFAULT_SCHEDULE = "*/2 * * * *";
+const DEFAULT_PAGES_PER_RUN = 10;
 
 let scheduledTask = null;
 let isRunning = false;
@@ -17,8 +18,22 @@ const runOnce = async () => {
   try {
     const budgetYear = Number(process.env.EGP_BUDGET_YEAR || 2569);
     const limit = Number(process.env.EGP_INGEST_LIMIT || 100);
-    console.log(`Starting scheduled Bangkok EGP ingestion (budgetYear=${budgetYear})`);
-    const log = await runBangkokEgpIngestion({ budgetYear, page: 1, limit });
+    const configuredPages = Number(
+      process.env.EGP_INGEST_PAGES || DEFAULT_PAGES_PER_RUN
+    );
+    const pages = Number.isInteger(configuredPages) && configuredPages > 0
+      ? configuredPages
+      : DEFAULT_PAGES_PER_RUN;
+    console.log(
+      `Starting scheduled Bangkok EGP ingestion ` +
+      `(budgetYear=${budgetYear}, pages=1-${pages})`
+    );
+    const log = await runBangkokEgpIngestion({
+      budgetYear,
+      page: 1,
+      pages,
+      limit,
+    });
     console.log(`Scheduled Bangkok EGP ingestion finished: ${log.status}, ${log.torsIngested} project(s) ingested`);
   } catch (error) {
     console.error("Scheduled Bangkok EGP ingestion failed:", error.message);

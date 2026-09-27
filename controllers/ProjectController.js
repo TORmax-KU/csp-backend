@@ -8,7 +8,7 @@ const fetch = async (req, res) => {
 
     if (search) {
       const regex = { $regex: search, $options: "i" };
-      query.$or = [{ title: regex }, { description: regex }, { agency: regex }];
+      query.$or = [{ title: regex }, { description: regex }, { descriptions: regex }, { agency: regex }];
     }
     if (agency) query.agency = { $regex: agency, $options: "i" };
     if (status) query.status = status;
@@ -94,6 +94,11 @@ const update = async (req, res) => {
     const patch = {};
     for (const field of EDITABLE_FIELDS) {
       if (req.body[field] !== undefined) patch[field] = req.body[field];
+    }
+    if (patch.sourceUrl !== undefined && patch.sourceUrl !== project.sourceUrl) {
+      Object.assign(patch, { analysisStatus: "pending", descriptions: "", requiredSkills: [],
+        aiAnalysis: {}, analysisError: "", analysisErrorCode: "", analysisRetryCount: 0, nextAnalysisAt: null,
+        analysisLease: null, analysisLeaseUntil: null, analyzedAt: null });
     }
 
     // priceFlag is system-managed; only admins may override it
