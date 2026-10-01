@@ -18,3 +18,18 @@ test("does not classify a hardware-only TOR as software", () => {
   assert.equal(result.isSoftware, false);
   assert.ok(result.hardwareOnlyMatches.includes("เครื่องคอมพิวเตอร์"));
 });
+
+test("does not classify an unrelated project as software due to agency name in rawText", () => {
+  const record = {
+    title: "จ้างทำกล่องกระดาษบรรจุเอกสาร จำนวน 500 ใบ โดยวิธีเฉพาะเจาะจง",
+    description: "",
+    rawText: JSON.stringify({
+      masterOrgDepartmentName: "สำนักงานพัฒนาระบบระบายน้ำ",
+    }),
+  };
+
+  const result = classifySoftware(record);
+
+  assert.equal(result.isSoftware, false);
+  assert.deepEqual(result.matchedKeywords, []);
+});

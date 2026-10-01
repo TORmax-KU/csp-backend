@@ -1,4 +1,4 @@
-const FILTER_VERSION = "software-keywords-v1";
+const FILTER_VERSION = "software-keywords-v2";
 
 const POSITIVE_KEYWORDS = [
   "software",
@@ -41,12 +41,13 @@ const normalizeText = (value) => String(value || "")
   .trim();
 
 const classifySoftware = (record) => {
+  // Only scan project-scope fields; the raw record can contain agency/department
+  // names (e.g. "...พัฒนาระบบ...") that falsely trigger keyword matches.
   const text = normalizeText([
     record.title,
     record.description,
     record.category,
     record.scope,
-    record.rawText,
   ].filter(Boolean).join(" "));
 
   const matchedKeywords = POSITIVE_KEYWORDS.filter((keyword) =>
