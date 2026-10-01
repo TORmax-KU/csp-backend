@@ -1,30 +1,17 @@
 const Project = require("../src/models/Project");
+const Skill = require("../src/models/Skill");
+const { buildProjectQuery } = require("../src/services/ProjectSearch");
 
 const fetch = async (req, res) => {
   try {
-    const { search, agency, status, priceFlag, minBudget, maxBudget, deadline, page = 1, limit = 10 } = req.query;
-
-    const query = {};
-
-    if (search) {
-      const regex = { $regex: search, $options: "i" };
-      query.$or = [{ title: regex }, { description: regex }, { descriptions: regex }, { agency: regex }];
-    }
-    if (agency) query.agency = { $regex: agency, $options: "i" };
-    if (status) query.status = status;
-    if (priceFlag) query.priceFlag = priceFlag;
-    if (minBudget || maxBudget) {
-      query.budget = {};
-      if (minBudget) query.budget.$gte = Number(minBudget);
-      if (maxBudget) query.budget.$lte = Number(maxBudget);
-    }
-    if (deadline) query.deadline = { $lte: new Date(deadline) };
+    const { query, page, limit } = await buildProjectQuery(req.query, async regex =>
+      (await Skill.find({ name: regex }).select("_id").lean()).map(skill => skill._id));
 
     const [projects, total] = await Promise.all([
       Project.find(query)
         .populate("requiredSkills", "name category")
         .populate("publisherId", "username email")
-        .sort({ createdAt: -1 })
+        .sort({ createdAt: -1, _id: -1 })
         .skip((page - 1) * Number(limit))
         .limit(Number(limit)),
       Project.countDocuments(query),
@@ -32,6 +19,7 @@ const fetch = async (req, res) => {
 
     res.status(200).json({ projects, total, page: Number(page), limit: Number(limit) });
   } catch (error) {
+    if (error.status === 400) return res.status(400).json({ error: error.message });
     console.error("Fetch projects error:", error);
     res.status(500).json({ error: "Server error while fetching projects" });
   }
