@@ -6,14 +6,15 @@ const cors = require("cors");
 const session = require("express-session");
 const { MongoStore } = require("connect-mongo");
 const passport = require("./config/passport");
+const { randomBytes } = require("node:crypto");
 
 const app = express();
 
-const PORT = process.env.PORT || 5000;
+const PORT = process.env.PORT || 5001;
 
 const MONGO_URI =
   process.env.MONGO_URI ||
-  "mongodb://localhost:27017/fullstack_db";
+  "mongodb://127.0.0.1:27017/fullstack_db";
 
 app.use(
   cors({
@@ -25,7 +26,11 @@ app.use(express.json());
 
 app.use(
   session({
-    secret: process.env.SESSION_SECRET,
+    secret: process.env.SESSION_SECRET || (() => {
+      if (process.env.NODE_ENV === "production") throw new Error("SESSION_SECRET is required in production");
+      console.warn("Using an ephemeral development session secret; configure SESSION_SECRET for persistent logins.");
+      return randomBytes(32).toString("hex");
+    })(),
     resave: false,
     saveUninitialized: false,
     store: MongoStore.create({ mongoUrl: MONGO_URI }),

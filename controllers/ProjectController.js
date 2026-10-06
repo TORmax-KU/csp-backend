@@ -1,6 +1,8 @@
 const Project = require("../src/models/Project");
 const Skill = require("../src/models/Skill");
 const { buildProjectQuery } = require("../src/services/ProjectSearch");
+const { availability } = require("../src/services/ProcurementAvailability");
+const { ingestionStatus } = require("../src/services/IngestionScheduler");
 
 const fetch = async (req, res) => {
   try {
@@ -11,13 +13,15 @@ const fetch = async (req, res) => {
       Project.find(query)
         .populate("requiredSkills", "name category")
         .populate("publisherId", "username email")
-        .sort({ createdAt: -1, _id: -1 })
+        .select("-rawData -analysisError -analysisLease")
+        .sort(req.query.sort === "newest" ? { announcedAt: -1, _id: -1 } : req.query.sort === "budget" ? { budget: -1, _id: -1 } : { deadline: 1, _id: 1 })
         .skip((page - 1) * Number(limit))
         .limit(Number(limit)),
       Project.countDocuments(query),
     ]);
 
-    res.status(200).json({ projects, total, page: Number(page), limit: Number(limit) });
+    res.set("Cache-Control", "no-store");
+    res.status(200).json({ projects: projects.map(p => ({ ...p.toObject(), availability: availability(p) })), total, page: Number(page), limit: Number(limit), ingestion: ingestionStatus() });
   } catch (error) {
     if (error.status === 400) return res.status(400).json({ error: error.message });
     console.error("Fetch projects error:", error);
@@ -27,13 +31,16 @@ const fetch = async (req, res) => {
 
 const fetchById = async (req, res) => {
   try {
+    if (!/^[a-f\d]{24}$/i.test(req.params.id)) return res.status(404).json({ message: "Project not found" });
     const project = await Project.findById(req.params.id)
+      .select("-rawData -analysisError -analysisLease")
       .populate("requiredSkills", "name category")
       .populate("publisherId", "username email");
 
-    if (!project) return res.status(404).json({ message: "Project not found" });
+    if (!project || project.status !== "Public") return res.status(404).json({ message: "Project not found" });
 
-    res.status(200).json(project);
+    res.set("Cache-Control", "no-store");
+    res.status(200).json({ ...project.toObject(), availability: availability(project) });
   } catch (error) {
     console.error("Fetch project error:", error);
     res.status(500).json({ error: "Server error while fetching project" });

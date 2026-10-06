@@ -1,7 +1,102 @@
-# clone csp-backend
-# clone frontend repo
-# create .env in csp-backend folder
-# docker compose up -d
+# TORmax backend
+
+## Run with your own MongoDB (no Docker required)
+
+Requires Node.js 22+ and a running MongoDB instance.
+
+```powershell
+cd csp-backend
+npm ci
+Copy-Item .env.example .env
+npm run dev
+```
+
+Copy the example only if you do not already have `.env`. The default connection is
+`mongodb://127.0.0.1:27017/fullstack_db`; change `MONGO_URI` to your own MongoDB URI.
+The backend defaults to port 5001. Browsing does not require Google OAuth or Vertex
+credentials. Google login is unavailable until its credentials are configured.
+Set `SESSION_SECRET` for persistent sessions; it is mandatory in production.
+
+In another terminal:
+
+```powershell
+cd TORment-Frontend
+npm ci
+Copy-Item .env.example .env.local
+npm run dev
+```
+
+Open `http://localhost:3000`. Each teammate connects to their own MongoDB;
+pulling Git does not copy another person's database. The source check starts
+automatically after MongoDB connects and repeats every five minutes, in either
+local Node or Docker. It runs only while the backend is running. Concurrent ticks
+in a single backend process are skipped; use one ingestion-enabled backend per DB.
+
+For the root Docker stack, run `docker compose up -d --build`. Compose overrides
+the Mongo host to `mongo` and maps backend port 5000 to host port 5001.
+
+## National e-GP migration: source access is currently blocked
+
+The old Bangkok e-GP scheduler is retired and cannot repopulate old records.
+On 2026-10-05 the national e-GP public announcement API returned
+`{"validateCfTurnTile":false}`. The new client detects this as
+`SOURCE_ACCESS_REQUIRED`, logs a failed attempt, and shows an explicit message
+on the website. It does **not** treat this response as a successful empty import.
+No CAPTCHA bypass, token generation or synthetic project seeding is implemented.
+
+**Automatic import of real projects is not complete.** Authorized source access
+or representative official exports are still needed to verify detail fields,
+bid-closing timestamps, project status and original TOR links. Even if search
+access becomes available, search-only rows are held back with
+`SOURCE_DETAILS_REQUIRED`; they cannot establish that a project is open or has a
+working TOR. A short-lived announcement token alone is not a permanent integration.
+`GPROC_ANNOUNCEMENT_TOKEN` can provide legitimately obtained access for further
+integration verification; never commit it. Set `GPROC_INGESTION_ENABLED=false`
+to disable the automatic source checks.
+
+The scheduler currently probes the software search for the current Thai fiscal
+year. Full keyword coverage, pagination, detail/document ingestion and status
+refresh must be completed after access is available. Do not claim the scraper is
+production-ready or promise teammates their database will populate yet.
+
+## Public data rules
+
+- Default search includes only public, verified national e-GP technology projects
+  with a future bid deadline, source status `open`, and a verified TOR document.
+- Closed, awarded, cancelled, draft and expired projects cannot be brought back
+  by changing search parameters. Expiry is checked at request time.
+- Source and document checks must be within the last 24 hours. This prevents
+  indefinitely presenting stale data as current; it is not a guarantee against
+  a source update between syncs.
+- Unknown deadlines appear only in the separate `availability=unknown` view.
+  They are never described as open indefinitely. Procurement start, announcement,
+  document sale end and final submission deadline are distinct database fields.
+- `deadlineYear=2569` (or `2026`) and `deadlineFrom`/`deadlineTo=YYYY-MM-DD`
+  filter final submission dates using Bangkok calendar boundaries. Sorting:
+  `deadline` (default), `newest`, or `budget`. Agency, method and budget filters
+  combine with text search and pagination.
+- IT hardware and system maintenance are included; paper, stationery and printer
+  consumables are excluded by the technology classifier. Keyword classification
+  still needs source review for ambiguous procurement titles.
+- The live home page does not use demo listings or invented statistics. Legacy
+  demo detail pages carry an explicit demo label.
+
+Cleanup for a teammate who still has the retired source:
+
+```powershell
+node scripts/remove-retired-procurement.js
+node scripts/remove-retired-procurement.js --apply
+```
+
+The first command previews the count. The second deletes only `bangkok-egp`
+projects without a publisher and their dependent matches/notifications. Users,
+profiles, skills and other sources are not deleted. Run after updating/restarting
+the backend so the old importer cannot race the cleanup.
+
+The `projects` schema now stores procurement dates, method, reference price,
+status, verified documents, qualifications, deliverables, source skill names,
+contact details and submission location. Fields missing from the source remain
+missing in the UI; AI summaries are separately labeled and cannot supply dates.
 
 ## Vertex AI TOR analysis
 

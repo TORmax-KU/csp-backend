@@ -1,4 +1,4 @@
-const FILTER_VERSION = "software-keywords-v2";
+const FILTER_VERSION = "technology-keywords-v3";
 
 const POSITIVE_KEYWORDS = [
   "software",
@@ -11,6 +11,16 @@ const POSITIVE_KEYWORDS = [
   "database",
   "cloud",
   "cybersecurity",
+  "network maintenance",
+  "server",
+  "hardware",
+  "computer",
+  "network equipment",
+  "คอมพิวเตอร์",
+  "ฮาร์ดแวร์",
+  "เซิร์ฟเวอร์",
+  "แม่ข่าย",
+  "ระบบเครือข่าย",
   "ซอฟต์แวร์",
   "โปรแกรม",
   "แอปพลิเคชัน",
@@ -58,7 +68,7 @@ const classifySoftware = (record) => {
   );
 
   return {
-    isSoftware: matchedKeywords.length > 0,
+    isSoftware: matchedKeywords.length > 0 && !/กระดาษ|หมึกพิมพ์|ตลับหมึก|เครื่องเขียน|\b(?:paper|toner|cartridge|stationery)\b/i.test(text),
     matchedKeywords,
     hardwareOnlyMatches,
     filterVersion: FILTER_VERSION,

@@ -3,6 +3,11 @@ const passport = require("passport");
 
 const router = express.Router();
 
+router.use(["/google", "/google/callback"], (req, res, next) => {
+  if (!process.env.GOOGLE_CLIENT_ID || !process.env.GOOGLE_CLIENT_SECRET) return res.status(503).json({ message: "Google login is not configured. Public procurement browsing remains available." });
+  next();
+});
+
 router.get(
   "/google",
   passport.authenticate("google", { scope: ["profile", "email"] })
