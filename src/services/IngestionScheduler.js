@@ -1,6 +1,8 @@
 const cron = require("node-cron");
 const IngestionLog = require("../models/IngestionLog");
 const { fetchAnnouncements, SOURCE, SEARCH_PAGE } = require("./GprocurementClient");
+const { runBangkokEgpIngestion } = require("./RunBangkokEgpIngestion");
+const { enrichBangkokProjects } = require("./BangkokEgpEnrichment");
 const SCHEDULE = "*/5 * * * *";
 let scheduledTask;
 let running = false;
@@ -30,12 +32,29 @@ async function runOnce() {
   }
 }
 
+async function runBangkokOnce() {
+  try {
+    const log = await runBangkokEgpIngestion();
+    console.log(`Bangkok e-GP ingestion finished: ${log.status}, ${log.torsIngested} project(s) ingested`);
+    const batchSize = Number(process.env.BANGKOK_ENRICH_BATCH || 5);
+    const enrich = await enrichBangkokProjects({ batchSize });
+    console.log(`Bangkok e-GP enrichment: ${enrich.enriched} enriched, ${enrich.failed} failed, ${enrich.scanned} scanned`);
+  } catch (error) {
+    console.error("Bangkok e-GP ingestion failed:", error.message);
+  }
+}
+
 function startIngestionScheduler() {
   if (scheduledTask) return scheduledTask;
   if (process.env.GPROC_INGESTION_ENABLED === "false") { state.status = "disabled"; return null; }
   scheduledTask = cron.schedule(SCHEDULE, runOnce, { timezone: "Asia/Bangkok" });
   console.log("National e-GP ingestion: on startup and every 5 minutes");
   void runOnce();
+  if (process.env.BANGKOK_INGESTION_ENABLED !== "false") {
+    void runBangkokOnce();
+    cron.schedule(SCHEDULE, runBangkokOnce, { timezone: "Asia/Bangkok" });
+    console.log("Bangkok e-GP ingestion: on startup and every 5 minutes");
+  }
   return scheduledTask;
 }
-module.exports = { startIngestionScheduler, runOnce, ingestionStatus };
+module.exports = { startIngestionScheduler, runOnce, runBangkokOnce, ingestionStatus };

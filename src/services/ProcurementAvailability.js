@@ -14,7 +14,7 @@ function availability(project, now = new Date()) {
 function publicProjectQuery(now = new Date(), mode = "open") {
   const base = {
     status: "Public", dataVerified: true,
-    source: "gprocurement", classification: "software",
+    source: { $in: ["gprocurement", "bangkok-egp"] }, classification: "software",
     sourceVerifiedAt: { $gte: new Date(now.getTime() - MAX_AGE_MS) },
     documents: { $elemMatch: { kind: "tor", url: { $regex: "^https://" }, verifiedAt: { $gte: new Date(now.getTime() - MAX_AGE_MS) } } },
   };
