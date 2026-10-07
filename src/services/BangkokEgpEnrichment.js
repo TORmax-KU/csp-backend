@@ -48,7 +48,7 @@ const enrichOne = async (project, deps) => {
 };
 
 const enrichBangkokProjects = async ({
-  batchSize = 5,
+  batchSize = 50,
   projects = Project,
   logs = IngestionLog,
   detail = fetchProjectDetail,

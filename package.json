@@ -6,6 +6,7 @@
   "scripts": {
     "dev": "nodemon src/server.js",
     "start": "node src/server.js",
+    "patch:demo": "node scripts/patch-demo-data.js",
     "test": "node --test"
   },
   "repository": {
@@ -31,7 +32,8 @@
     "mongoose": "^9.9.1",
     "node-cron": "^4.6.0",
     "passport": "^0.7.0",
-    "passport-google-oauth20": "^2.0.0"
+    "passport-google-oauth20": "^2.0.0",
+    "pdf-parse": "^2.4.5"
   },
   "devDependencies": {
     "nodemon": "^3.1.14"
