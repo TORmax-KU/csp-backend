@@ -72,9 +72,11 @@ const ingestRecords = async ({
       if (existing) {
         const { publisherId, ...updateFields } = project;
         if (existing.sourceUrl !== project.sourceUrl) {
+          // A changed detail URL invalidates prior AI analysis and TOR verification
           Object.assign(updateFields, { analysisStatus: "pending", descriptions: "", requiredSkills: [],
             aiAnalysis: {}, analysisError: "", analysisErrorCode: "", analysisRetryCount: 0, nextAnalysisAt: null,
-            analysisLease: null, analysisLeaseUntil: null, analyzedAt: null });
+            analysisLease: null, analysisLeaseUntil: null, analyzedAt: null,
+            dataVerified: false, documents: [], sourceVerifiedAt: null, procurementStatus: "unknown" });
         }
         await Project.findByIdAndUpdate(existing._id, {
           $set: updateFields,

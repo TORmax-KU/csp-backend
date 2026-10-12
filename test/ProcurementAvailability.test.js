@@ -16,7 +16,7 @@ test('deadline closes at the exact instant; terminal statuses override future de
 
 test('public query requires source verification and a recently verified TOR', () => {
   const query = publicProjectQuery(now);
-  assert.equal(query.source, 'gprocurement');
+  assert.deepEqual(query.source, { $in: ['gprocurement', 'bangkok-egp'] });
   assert.equal(query.documents.$elemMatch.kind, 'tor');
   assert.equal(query.documents.$elemMatch.verifiedAt.$gte.getTime(), now - MAX_AGE_MS);
 });
