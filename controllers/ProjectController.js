@@ -1,37 +1,29 @@
 const Project = require("../src/models/Project");
+const Skill = require("../src/models/Skill");
+const { buildProjectQuery } = require("../src/services/ProjectSearch");
+const { availability } = require("../src/services/ProcurementAvailability");
+const { ingestionStatus } = require("../src/services/IngestionScheduler");
 
 const fetch = async (req, res) => {
   try {
-    const { search, agency, status, priceFlag, minBudget, maxBudget, deadline, page = 1, limit = 10 } = req.query;
-
-    const query = {};
-
-    if (search) {
-      const regex = { $regex: search, $options: "i" };
-      query.$or = [{ title: regex }, { description: regex }, { agency: regex }];
-    }
-    if (agency) query.agency = { $regex: agency, $options: "i" };
-    if (status) query.status = status;
-    if (priceFlag) query.priceFlag = priceFlag;
-    if (minBudget || maxBudget) {
-      query.budget = {};
-      if (minBudget) query.budget.$gte = Number(minBudget);
-      if (maxBudget) query.budget.$lte = Number(maxBudget);
-    }
-    if (deadline) query.deadline = { $lte: new Date(deadline) };
+    const { query, page, limit } = await buildProjectQuery(req.query, async regex =>
+      (await Skill.find({ name: regex }).select("_id").lean()).map(skill => skill._id));
 
     const [projects, total] = await Promise.all([
       Project.find(query)
         .populate("requiredSkills", "name category")
         .populate("publisherId", "username email")
-        .sort({ createdAt: -1 })
+        .select("-rawData -analysisError -analysisLease")
+        .sort(req.query.sort === "newest" ? { announcedAt: -1, _id: -1 } : req.query.sort === "budget" ? { budget: -1, _id: -1 } : { deadline: 1, _id: 1 })
         .skip((page - 1) * Number(limit))
         .limit(Number(limit)),
       Project.countDocuments(query),
     ]);
 
-    res.status(200).json({ projects, total, page: Number(page), limit: Number(limit) });
+    res.set("Cache-Control", "no-store");
+    res.status(200).json({ projects: projects.map(p => ({ ...p.toObject(), availability: availability(p) })), total, page: Number(page), limit: Number(limit), ingestion: ingestionStatus() });
   } catch (error) {
+    if (error.status === 400) return res.status(400).json({ error: error.message });
     console.error("Fetch projects error:", error);
     res.status(500).json({ error: "Server error while fetching projects" });
   }
@@ -39,13 +31,16 @@ const fetch = async (req, res) => {
 
 const fetchById = async (req, res) => {
   try {
+    if (!/^[a-f\d]{24}$/i.test(req.params.id)) return res.status(404).json({ message: "Project not found" });
     const project = await Project.findById(req.params.id)
+      .select("-rawData -analysisError -analysisLease")
       .populate("requiredSkills", "name category")
       .populate("publisherId", "username email");
 
-    if (!project) return res.status(404).json({ message: "Project not found" });
+    if (!project || project.status !== "Public") return res.status(404).json({ message: "Project not found" });
 
-    res.status(200).json(project);
+    res.set("Cache-Control", "no-store");
+    res.status(200).json({ ...project.toObject(), availability: availability(project) });
   } catch (error) {
     console.error("Fetch project error:", error);
     res.status(500).json({ error: "Server error while fetching project" });
@@ -94,6 +89,11 @@ const update = async (req, res) => {
     const patch = {};
     for (const field of EDITABLE_FIELDS) {
       if (req.body[field] !== undefined) patch[field] = req.body[field];
+    }
+    if (patch.sourceUrl !== undefined && patch.sourceUrl !== project.sourceUrl) {
+      Object.assign(patch, { analysisStatus: "pending", descriptions: "", requiredSkills: [],
+        aiAnalysis: {}, analysisError: "", analysisErrorCode: "", analysisRetryCount: 0, nextAnalysisAt: null,
+        analysisLease: null, analysisLeaseUntil: null, analyzedAt: null });
     }
 
     // priceFlag is system-managed; only admins may override it

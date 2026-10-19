@@ -1,10 +1,13 @@
-const DEFAULT_SEARCH_URL = "https://egp2.bangkok.go.th/project-search";
+const DEFAULT_SEARCH_URL = "https://egp2.bangkok.go.th/appapi/api/Projects/GetProjectFromFilter";
 const SOURCE = "bangkok-egp";
 const PROJECT_DETAIL_URL = "https://egp2.bangkok.go.th/project-detail";
 
 const fetchJson = async (url, options = {}) => {
   const controller = new AbortController();
-  const timeout = setTimeout(() => controller.abort(), options.timeoutMs || 30000);
+  const timeoutMs = Number(
+    options.timeoutMs || process.env.EGP_REQUEST_TIMEOUT_MS || 120000
+  );
+  const timeout = setTimeout(() => controller.abort(), timeoutMs);
 
   try {
     const response = await fetch(url, {
@@ -18,6 +21,14 @@ const fetchJson = async (url, options = {}) => {
 
     if (!response.ok) {
       throw new Error(`Bangkok EGP returned HTTP ${response.status}`);
+    }
+
+    const contentType = response.headers.get("content-type") || "";
+    if (!contentType.includes("application/json")) {
+      throw new Error(
+        `Bangkok EGP returned ${contentType || "an unknown content type"}; ` +
+        "EGP_API_URL must point to a JSON API endpoint"
+      );
     }
 
     return response.json();
@@ -37,16 +48,16 @@ const firstValue = (record, keys) => {
 
 const normalizeRecord = (record) => {
   const externalId = firstValue(record, [
-    "externalId", "projectId", "id", "uuid", "ประกาศเลขที่", "เลขที่โครงการ",
+    "externalId", "projectId", "projectNumber", "projectProjectNumber", "id", "uuid", "ประกาศเลขที่", "เลขที่โครงการ",
   ]);
   const title = firstValue(record, [
-    "title", "projectName", "name", "projectTitle", "ชื่อโครงการ",
+    "title", "projectProjectName", "projectName", "name", "projectTitle", "ชื่อโครงการ",
   ]);
   const agency = firstValue(record, [
-    "agency", "masterOrgGroupName", "department", "organization", "หน่วยงาน", "ชื่อหน่วยงาน",
+    "agency", "masterOrgGroupName", "masterOrgDepartmentName", "department", "organization", "หน่วยงาน", "ชื่อหน่วยงาน",
   ]);
   const description = firstValue(record, [
-    "description", "scope", "detail", "รายละเอียด", "ขอบเขตงาน",
+    "description", "projectDescription", "scope", "detail", "รายละเอียด", "ขอบเขตงาน",
   ]);
   const budget = firstValue(record, [
     "budget", "projectBudget", "estimatedPrice", "วงเงินงบประมาณ", "ราคากลาง",
@@ -55,7 +66,7 @@ const normalizeRecord = (record) => {
     "deadline", "closingDate", "submissionDeadline", "วันที่สิ้นสุด",
   ]);
   const status = firstValue(record, [
-    "status", "projectStatus", "state", "สถานะ",
+    "status", "sourceStatus", "masterContractAvailableName", "masterContractAvailableCode", "projectStatus", "state", "สถานะ",
   ]);
   const sourceUrl = firstValue(record, ["sourceUrl", "url", "detailUrl"])
     || (externalId ? `${PROJECT_DETAIL_URL}/${externalId}` : undefined);

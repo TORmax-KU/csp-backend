@@ -14,6 +14,31 @@ const ProjectSchema = new mongoose.Schema({
         type: String,
         default: "",
     },
+    descriptions: { type: String, default: "" },
+    analysisStatus: { type: String, enum: ["pending", "processing", "completed", "failed", "awaiting_documents", "needs_review", "retry_pending"], default: "pending", index: true },
+    analysisAttempts: { type: Number, default: 0 },
+    analysisRetryCount: { type: Number, default: 0 },
+    nextAnalysisAt: Date,
+    analysisErrorCode: { type: String, default: "" },
+    analysisLease: String,
+    analysisLeaseUntil: Date,
+    analysisError: { type: String, default: "" },
+    analyzedAt: Date,
+    aiModel: String,
+    aiPromptVersion: String,
+    aiAnalysis: {
+        mandatorySkillNames: [String],
+        unmappedSkillNames: [String],
+        documentUrls: [String],
+        noMandatorySkillsReason: String,
+        skillEvidence: [{
+            _id: false,
+            name: String,
+            quote: String,
+            page: Number,
+            documentIndex: Number,
+        }],
+    },
     budget: {
         type: Number,
         min: 0,
@@ -81,10 +106,28 @@ const ProjectSchema = new mongoose.Schema({
     deadline: {
         type: Date,
     },
+    announcedAt: Date,
+    procurementStartAt: Date,
+    submissionStartAt: Date,
+    documentSaleEndAt: Date,
+    deadlinePrecision: { type: String, enum: ["datetime", "date", "unknown"], default: "unknown" },
+    procurementMethod: String,
+    referencePrice: Number,
+    procurementStatus: { type: String, enum: ["open", "unknown", "closed", "awarded", "cancelled", "draft"], default: "unknown", index: true },
+    sourceVerifiedAt: Date,
+    dataVerified: { type: Boolean, default: false },
+    documents: [{ _id: false, title: String, url: String, kind: { type: String, enum: ["tor", "announcement", "other"] }, verifiedAt: Date }],
+    qualifications: [String],
+    deliverables: [String],
+    sourceSkillNames: [String],
+    contact: { name: String, phone: String, email: String, address: String },
+    submissionLocation: String,
 }, {
     collection: "projects",
     timestamps: true,
 });
+
+ProjectSchema.index({ status: 1, dataVerified: 1, procurementStatus: 1, deadline: 1 });
 
 ProjectSchema.index(
     { source: 1, externalId: 1 },
