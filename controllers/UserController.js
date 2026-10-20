@@ -152,6 +152,7 @@ const fetch = async (req, res) => {
 
 const fetchById = async (req, res) => {
   try {
+    if (!/^[a-f\d]{24}$/i.test(req.params.id)) return res.status(404).json({ message: "User not found" });
     const user = await User.findById(req.params.id).populate("proficiency");
     if (!user) return res.status(404).json({ message: "User not found" });
 

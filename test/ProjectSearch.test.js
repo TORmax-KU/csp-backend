@@ -21,7 +21,7 @@ test('blank search only browses verified open procurement; Thai and object IDs w
   assert.equal(browse.query.status, 'Public');
   assert.equal(browse.query.procurementStatus, 'open');
   assert.equal(browse.query.dataVerified, true);
-  assert.equal(browse.query.deadline.$gt, now);
+  assert.equal(browse.query.$and[0].$or[0].deadline.$gt, now);
   assert.equal(browse.query.documents.$elemMatch.kind, 'tor');
   const thai = await buildProjectQuery({ search: 'ระบบ' }, async () => []);
   assert.ok(new RegExp(thai.query.$or[0].title.$regex).test('พัฒนาระบบ'));
@@ -33,7 +33,7 @@ test('blank search only browses verified open procurement; Thai and object IDs w
 test('Buddhist closing-year filter uses Bangkok year boundaries and cannot reveal expired bids', async () => {
   const now = new Date('2026-10-05T08:00:00+07:00');
   const { query } = await buildProjectQuery({ deadlineYear: '2569' }, async () => [], now);
-  assert.equal(query.deadline.$gt, now);
+  assert.equal(query.$and[0].$or[0].deadline.$gt, now);
   assert.equal(query.deadline.$gte.toISOString(), '2025-12-31T17:00:00.000Z');
   assert.equal(query.deadline.$lte.toISOString(), '2026-12-31T16:59:59.999Z');
   const range = await buildProjectQuery({ deadlineYear: '2569', deadlineFrom: '2026-10-06', deadlineTo: '2026-10-07' }, async () => [], now);

@@ -12,7 +12,7 @@ const fetch = async (req, res) => {
     const [projects, total] = await Promise.all([
       Project.find(query)
         .populate("requiredSkills", "name category")
-        .populate("publisherId", "username email")
+        .populate("publisherId", "username")
         .select("-rawData -analysisError -analysisLease")
         .sort(req.query.sort === "newest" ? { announcedAt: -1, _id: -1 } : req.query.sort === "budget" ? { budget: -1, _id: -1 } : { deadline: 1, _id: 1 })
         .skip((page - 1) * Number(limit))
@@ -35,7 +35,7 @@ const fetchById = async (req, res) => {
     const project = await Project.findById(req.params.id)
       .select("-rawData -analysisError -analysisLease")
       .populate("requiredSkills", "name category")
-      .populate("publisherId", "username email");
+      .populate("publisherId", "username");
 
     if (!project || project.status !== "Public") return res.status(404).json({ message: "Project not found" });
 

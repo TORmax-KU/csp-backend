@@ -12,7 +12,7 @@ test('MongoDB excludes expired, terminal, unverified and missing-TOR records acr
   const now = new Date('2026-10-05T10:00:00+07:00');
   const base = {
     source: 'gprocurement', status: 'Public', classification: 'software', dataVerified: true,
-    sourceVerifiedAt: now, procurementStatus: 'open', deadline: new Date('2026-10-06T12:00:00+07:00'),
+    sourceVerifiedAt: now, procurementStatus: 'open', deadlinePrecision: 'datetime', deadline: new Date('2026-10-06T12:00:00+07:00'),
     documents: [{ kind: 'tor', title: 'Test fixture only', url: 'https://example.org/fixture.pdf', verifiedAt: now }],
   };
   const cases = [
@@ -38,6 +38,14 @@ test('MongoDB excludes expired, terminal, unverified and missing-TOR records acr
     assert.deepEqual((await Project.find(dated.query).lean()).map(p => p.title).sort(), ['old-source', 'open']);
     const oldYear = await buildProjectQuery({ deadlineYear: '2568' }, async () => [], now);
     assert.equal(await Project.countDocuments(oldYear.query), 0);
+    await Project.insertMany([
+      { ...base, title: 'date-only-today', externalId: 'date-today', deadlinePrecision: 'date', deadline: new Date('2026-10-05T00:00:00Z') },
+      { ...base, title: 'date-only-yesterday', externalId: 'date-yesterday', deadlinePrecision: 'unknown', deadline: new Date('2026-10-04T00:00:00Z') },
+    ]);
+    for (const availability of ['open', 'all']) {
+      const today = await buildProjectQuery({ availability, search: 'date-only' }, async () => [], now);
+      assert.deepEqual((await Project.find(today.query).lean()).map(p => p.title), ['date-only-today']);
+    }
   } finally {
     await connection.db.collection(collection).drop().catch(error => { if (error.code !== 26) throw error; });
     await connection.close();

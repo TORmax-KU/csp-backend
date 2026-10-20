@@ -61,6 +61,15 @@ production-ready or promise teammates their database will populate yet.
 
 ## Public data rules
 
+- User profiles are private: `GET /api/users` requires an administrator;
+  `GET /api/users/:id` requires the account owner or an administrator. Anonymous
+  requests return 401; cross-account requests return 403. Invalid IDs return
+  404 for authorized readers. Public project responses omit publisher email.
+- Exact (`datetime`) deadlines close at their specified instant. Date-only or
+  unknown-precision deadlines stay listed through their Bangkok calendar date;
+  the UI displays a date rather than an invented time. This does not confirm
+  that submissions remain accepted throughout that date.
+
 - Default API search includes only public, verified technology projects from supported sources
   with a future bid deadline, source status `open`, and a verified TOR document.
 - Closed, awarded, cancelled, draft and expired projects cannot be brought back

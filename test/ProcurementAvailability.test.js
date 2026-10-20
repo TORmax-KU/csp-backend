@@ -3,7 +3,13 @@ const assert = require('node:assert/strict');
 const { availability, publicProjectQuery, MAX_AGE_MS } = require('../src/services/ProcurementAvailability');
 const { budgetYear, readSearchResponse, fetchAnnouncements } = require('../src/services/GprocurementClient');
 const now = new Date('2026-10-05T10:00:00+07:00');
-const project = { procurementStatus: 'open', deadline: '2026-10-05T10:00:01+07:00', dataVerified: true, sourceVerifiedAt: now };
+const project = { procurementStatus: 'open', deadline: '2026-10-05T10:00:01+07:00', deadlinePrecision: 'datetime', dataVerified: true, sourceVerifiedAt: now };
+
+test('date-only deadlines remain on their listed day without inventing a closing time', () => {
+  const dateOnly = { ...project, deadlinePrecision: 'date', deadline: '2026-10-05T00:00:00Z' };
+  assert.equal(availability(dateOnly, now), 'open');
+  assert.equal(availability(dateOnly, new Date('2026-10-06T00:00:00+07:00')), 'closed');
+});
 
 test('deadline closes at the exact instant; terminal statuses override future deadlines', () => {
   assert.equal(availability(project, now), 'open');
