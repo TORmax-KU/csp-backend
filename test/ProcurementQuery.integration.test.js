@@ -26,10 +26,16 @@ test('MongoDB excludes expired, terminal, unverified and missing-TOR records acr
     await Project.insertMany(cases.map(([title, patch], index) => ({ ...base, ...patch, title, externalId: String(index) })));
     for (const params of [{}, { deadlineYear: '2569' }, { deadlineFrom: '2026-10-01', deadlineTo: '2026-10-31' }]) {
       const { query } = await buildProjectQuery(params, async () => [], now);
-      assert.deepEqual((await Project.find(query).lean()).map(p => p.title), ['open']);
+      assert.deepEqual((await Project.find(query).lean()).map(p => p.title).sort(), ['old-source', 'open']);
     }
     const unknown = await buildProjectQuery({ availability: 'unknown' }, async () => [], now);
     assert.deepEqual((await Project.find(unknown.query).lean()).map(p => p.title), ['unknown']);
+    const all = await buildProjectQuery({ availability: 'all' }, async () => [], now);
+    assert.deepEqual((await Project.find(all.query).lean()).map(p => p.title).sort(), ['old-source', 'open', 'unknown']);
+    const searched = await buildProjectQuery({ availability: 'all', search: 'unknown' }, async () => [], now);
+    assert.deepEqual((await Project.find(searched.query).lean()).map(p => p.title), ['unknown']);
+    const dated = await buildProjectQuery({ availability: 'all', deadlineYear: '2569' }, async () => [], now);
+    assert.deepEqual((await Project.find(dated.query).lean()).map(p => p.title).sort(), ['old-source', 'open']);
     const oldYear = await buildProjectQuery({ deadlineYear: '2568' }, async () => [], now);
     assert.equal(await Project.countDocuments(oldYear.query), 0);
   } finally {

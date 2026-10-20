@@ -12,7 +12,7 @@ async function buildProjectQuery(params, findSkillIds, now = new Date()) {
   if (!Number.isSafeInteger(page) || page < 1 || !Number.isSafeInteger(limit) || limit < 1 || limit > 100 || !Number.isSafeInteger((page - 1) * limit)) {
     invalid("Page must be a positive integer and limit must be between 1 and 100");
   }
-  if (params.availability && !["open", "unknown"].includes(params.availability)) invalid("Invalid availability");
+  if (params.availability && !["all", "open", "unknown"].includes(params.availability)) invalid("Invalid availability");
   if (params.status && params.status !== "Public") invalid("Only public projects are searchable");
   if (params.sort && !["deadline", "newest", "budget"].includes(params.sort)) invalid("Invalid sort");
   const query = publicProjectQuery(now, params.availability);

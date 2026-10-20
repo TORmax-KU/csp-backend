@@ -61,14 +61,24 @@ production-ready or promise teammates their database will populate yet.
 
 ## Public data rules
 
-- Default search includes only public, verified national e-GP technology projects
+- Default API search includes only public, verified technology projects from supported sources
   with a future bid deadline, source status `open`, and a verified TOR document.
 - Closed, awarded, cancelled, draft and expired projects cannot be brought back
   by changing search parameters. Expiry is checked at request time.
 - Source and document checks must be within the last 24 hours. This prevents
   indefinitely presenting stale data as current; it is not a guarantee against
   a source update between syncs.
-- Unknown deadlines appear only in the separate `availability=unknown` view.
+- `GET /api/projects?availability=all` combines eligible future-deadline and
+  unknown-deadline listings. The website uses this mode by default so missing
+  deadlines do not silently hide search matches. Omitting `availability` retains
+  the API's existing `open` default. `availability=unknown` shows only unknown
+  deadlines; `availability=open` shows only eligible future deadlines.
+  All modes preserve source, TOR verification and terminal-status exclusions.
+  Date filters in `all` mode exclude unknown deadlines.
+  Text search matches a literal phrase (case-insensitive), not translation or
+  synonyms. No matches returns HTTP 200 with `projects: []` and `total: 0`;
+  malformed filters return HTTP 400.
+- Unknown deadlines carry an explicit warning in cards and details.
   They are never described as open indefinitely. Procurement start, announcement,
   document sale end and final submission deadline are distinct database fields.
 - `deadlineYear=2569` (or `2026`) and `deadlineFrom`/`deadlineTo=YYYY-MM-DD`
@@ -78,8 +88,12 @@ production-ready or promise teammates their database will populate yet.
 - IT hardware and system maintenance are included; paper, stationery and printer
   consumables are excluded by the technology classifier. Keyword classification
   still needs source review for ambiguous procurement titles.
-- The live home page does not use demo listings or invented statistics. Legacy
-  demo detail pages carry an explicit demo label.
+- The live home page and TOR detail pages use database records only. Legacy
+  demo IDs return the not-found view. The demo data patching command has been
+  removed; never fabricate deadlines or verification metadata to populate results.
+- `node scripts/audit-demo-data.js` (with `MONGO_URI` configured) performs a
+  read-only check for the retired demo script's date fingerprints. Matches are
+  candidates for source review, not proof that a record should be deleted.
 
 Cleanup for a teammate who still has the retired source:
 

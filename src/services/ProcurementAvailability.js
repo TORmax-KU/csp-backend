@@ -26,6 +26,11 @@ function publicProjectQuery(now = new Date(), mode = "open") {
     sourceVerifiedAt: { $gte: new Date(now.getTime() - MAX_AGE_MS) },
     documents: { $elemMatch: { kind: "tor", url: { $regex: "^https://" }, verifiedAt: { $gte: new Date(now.getTime() - MAX_AGE_MS) } } },
   };
+  // Keep eligibility separate from the text-search $or.
+  if (mode === "all") return { ...base, $and: [{ $or: [
+    { procurementStatus: "open", deadline: { $gt: now } },
+    { procurementStatus: { $in: ["open", "unknown"] }, deadline: null },
+  ] }] };
   if (mode === "unknown") return { ...base, procurementStatus: { $in: ["open", "unknown"] }, deadline: null };
   return { ...base, procurementStatus: "open", deadline: { $gt: now } };
 }
