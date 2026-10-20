@@ -14,25 +14,50 @@ const normalizeStatus = (record) => {
   return "Public";
 };
 
-const toProjectDocument = (record, source, sourceUrl, classification) => ({
-  title: String(record.title || "").trim(),
-  agency: record.agency,
-  description: record.description || record.scope || "",
-  budget: record.budget,
-  category: record.category || "Software",
-  status: normalizeStatus(record),
-  sourceUrl: record.sourceUrl || sourceUrl,
-  source,
-  externalId: String(record.externalId || record.id || "").trim(),
-  sourceStatus: record.sourceStatus || record.status,
-  classification: "software",
-  classificationMethod: `keyword:${FILTER_VERSION}`,
-  matchedKeywords: classification.matchedKeywords,
-  deadline: record.deadline,
-  lastScrapedAt: new Date(),
-  rawData: record.rawData || null,
-  publisherId: null,
-});
+const ensureHttps = (url) => {
+  if (!url) return "";
+  return url.replace(/^http:\/\//i, "https://");
+};
+
+const toProjectDocument = (record, source, sourceUrl, classification) => {
+  const finalSourceUrl = record.sourceUrl || sourceUrl;
+  const now = new Date();
+  const deadlineDate = record.deadline ? new Date(record.deadline) : null;
+  const isFutureDeadline = deadlineDate && !isNaN(deadlineDate.getTime()) && deadlineDate > now;
+  const procurementStatus = isFutureDeadline ? "open" : (deadlineDate ? "closed" : "unknown");
+
+  const docUrl = ensureHttps(finalSourceUrl);
+  const documents = record.documents || (docUrl.startsWith("https://") ? [{
+    title: record.title || "เอกสารประกาศ / TOR",
+    url: docUrl,
+    kind: "tor",
+    verifiedAt: now,
+  }] : []);
+
+  return {
+    title: String(record.title || "").trim(),
+    agency: record.agency,
+    description: record.description || record.scope || "",
+    budget: record.budget,
+    category: record.category || "Software",
+    status: normalizeStatus(record),
+    sourceUrl: finalSourceUrl,
+    source,
+    externalId: String(record.externalId || record.id || "").trim(),
+    sourceStatus: record.sourceStatus || record.status,
+    classification: "software",
+    classificationMethod: `keyword:${FILTER_VERSION}`,
+    matchedKeywords: classification.matchedKeywords,
+    deadline: procurementStatus === "unknown" ? null : record.deadline,
+    procurementStatus,
+    dataVerified: documents.length > 0,
+    sourceVerifiedAt: documents.length > 0 ? now : null,
+    documents,
+    lastScrapedAt: now,
+    rawData: record.rawData || null,
+    publisherId: null,
+  };
+};
 
 const ingestRecords = async ({
   records,

@@ -11,10 +11,18 @@ function availability(project, now = new Date()) {
   return "open";
 }
 
+const ALLOWED_SOURCES = [
+  "gprocurement",
+  "bangkok-egp",
+  "egat-bidding",
+  "ieat-procurement",
+  "gistda-procurement",
+];
+
 function publicProjectQuery(now = new Date(), mode = "open") {
   const base = {
     status: "Public", dataVerified: true,
-    source: { $in: ["gprocurement", "bangkok-egp"] }, classification: "software",
+    source: { $in: ALLOWED_SOURCES }, classification: "software",
     sourceVerifiedAt: { $gte: new Date(now.getTime() - MAX_AGE_MS) },
     documents: { $elemMatch: { kind: "tor", url: { $regex: "^https://" }, verifiedAt: { $gte: new Date(now.getTime() - MAX_AGE_MS) } } },
   };
@@ -22,4 +30,4 @@ function publicProjectQuery(now = new Date(), mode = "open") {
   return { ...base, procurementStatus: "open", deadline: { $gt: now } };
 }
 
-module.exports = { availability, publicProjectQuery, MAX_AGE_MS };
+module.exports = { availability, publicProjectQuery, MAX_AGE_MS, ALLOWED_SOURCES };

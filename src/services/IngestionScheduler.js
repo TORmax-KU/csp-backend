@@ -3,6 +3,7 @@ const IngestionLog = require("../models/IngestionLog");
 const { fetchAnnouncements, SOURCE, SEARCH_PAGE } = require("./GprocurementClient");
 const { runBangkokEgpIngestion } = require("./RunBangkokEgpIngestion");
 const { enrichBangkokProjects } = require("./BangkokEgpEnrichment");
+const { runEgatBiddingIngestion, runIeatIngestion, runGistdaIngestion } = require("./RunMultiSourceIngestion");
 const SCHEDULE = "*/5 * * * *";
 let scheduledTask;
 let running = false;
@@ -44,6 +45,30 @@ async function runBangkokOnce() {
   }
 }
 
+async function runEgatOnce() {
+  try {
+    await runEgatBiddingIngestion();
+  } catch (error) {
+    console.error("EGAT Bidding ingestion failed:", error.message);
+  }
+}
+
+async function runIeatOnce() {
+  try {
+    await runIeatIngestion();
+  } catch (error) {
+    console.error("IEAT Procurement ingestion failed:", error.message);
+  }
+}
+
+async function runGistdaOnce() {
+  try {
+    await runGistdaIngestion();
+  } catch (error) {
+    console.error("GISTDA Procurement ingestion failed:", error.message);
+  }
+}
+
 function startIngestionScheduler() {
   if (scheduledTask) return scheduledTask;
   if (process.env.GPROC_INGESTION_ENABLED === "false") { state.status = "disabled"; return null; }
@@ -55,6 +80,21 @@ function startIngestionScheduler() {
     cron.schedule(SCHEDULE, runBangkokOnce, { timezone: "Asia/Bangkok" });
     console.log("Bangkok e-GP ingestion: on startup and every 5 minutes");
   }
+  if (process.env.EGAT_INGESTION_ENABLED !== "false") {
+    void runEgatOnce();
+    cron.schedule(SCHEDULE, runEgatOnce, { timezone: "Asia/Bangkok" });
+    console.log("EGAT Bidding ingestion: on startup and every 5 minutes");
+  }
+  if (process.env.IEAT_INGESTION_ENABLED !== "false") {
+    void runIeatOnce();
+    cron.schedule(SCHEDULE, runIeatOnce, { timezone: "Asia/Bangkok" });
+    console.log("IEAT Procurement ingestion: on startup and every 5 minutes");
+  }
+  if (process.env.GISTDA_INGESTION_ENABLED !== "false") {
+    void runGistdaOnce();
+    cron.schedule(SCHEDULE, runGistdaOnce, { timezone: "Asia/Bangkok" });
+    console.log("GISTDA Procurement ingestion: on startup and every 5 minutes");
+  }
   return scheduledTask;
 }
-module.exports = { startIngestionScheduler, runOnce, runBangkokOnce, ingestionStatus };
+module.exports = { startIngestionScheduler, runOnce, runBangkokOnce, runEgatOnce, runIeatOnce, runGistdaOnce, ingestionStatus };

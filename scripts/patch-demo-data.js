@@ -37,10 +37,18 @@ async function patchDemoData() {
         ...d,
         verifiedAt: now,
       }));
-    } else {
-      const fallbackUrl = p.sourceUrl?.startsWith('https://')
-        ? p.sourceUrl
-        : `https://egp2.bangkok.go.th/project-detail/${p.externalId || p._id}`;
+      let fallbackUrl = p.sourceUrl ? p.sourceUrl.replace(/^http:\/\//i, 'https://') : null;
+      if (!fallbackUrl || !fallbackUrl.startsWith('https://')) {
+        if (p.source === 'egat-bidding') {
+          fallbackUrl = `https://bidding.egat.co.th/procure/project/index.php?project_id=${p.externalId || p._id}`;
+        } else if (p.source === 'gistda-procurement') {
+          fallbackUrl = 'https://www.gistda.or.th/procurement/';
+        } else if (p.source === 'ieat-procurement') {
+          fallbackUrl = 'https://iprocurement.ieat.go.th/news';
+        } else {
+          fallbackUrl = `https://egp2.bangkok.go.th/project-detail/${p.externalId || p._id}`;
+        }
+      }
 
       update.documents = [
         ...existingDocs,
