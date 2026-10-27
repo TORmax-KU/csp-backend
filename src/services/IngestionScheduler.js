@@ -37,7 +37,7 @@ async function runBangkokOnce() {
   try {
     const log = await runBangkokEgpIngestion();
     console.log(`Bangkok e-GP ingestion finished: ${log.status}, ${log.torsIngested} project(s) ingested`);
-    const batchSize = Number(process.env.BANGKOK_ENRICH_BATCH || 5);
+    const batchSize = Number(process.env.BANGKOK_ENRICH_BATCH || 25);
     const enrich = await enrichBangkokProjects({ batchSize });
     console.log(`Bangkok e-GP enrichment: ${enrich.enriched} enriched, ${enrich.failed} failed, ${enrich.scanned} scanned`);
   } catch (error) {

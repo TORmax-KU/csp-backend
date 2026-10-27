@@ -1,0 +1,7 @@
+simulation: vertex-extraction
+routing: path
+mocks:
+  - name: vertex-extraction
+    routeKey: vertex
+    origin: aiplatform.googleapis.com
+    path: postman/mocks/vertex-extraction/config.yaml

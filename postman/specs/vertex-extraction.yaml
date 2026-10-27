@@ -1,0 +1,31 @@
+openapi: 3.0.3
+info:
+  title: Vertex generateContent extraction test contract
+  version: 1.0.0
+servers:
+  - url: https://aiplatform.googleapis.com
+paths:
+  /v1beta1/projects/test-project/locations/global/publishers/google/models/test-model:generateContent:
+    post:
+      summary: Google GenAI generateContent JSON envelope (local test only)
+      responses:
+        '200':
+          description: Generated content
+          content:
+            application/json:
+              example:
+                candidates:
+                  - content:
+                      role: model
+                      parts:
+                        - text: '{}'
+                    finishReason: STOP
+        '429':
+          description: Rate limit
+          content:
+            application/json:
+              example:
+                error:
+                  code: 429
+                  message: Resource exhausted
+                  status: RESOURCE_EXHAUSTED

@@ -3,6 +3,7 @@ const Skill = require("../src/models/Skill");
 const { buildProjectQuery } = require("../src/services/ProjectSearch");
 const { availability } = require("../src/services/ProcurementAvailability");
 const { ingestionStatus } = require("../src/services/IngestionScheduler");
+const { pendingTorExtraction } = require("../src/services/PendingTorExtraction");
 
 const fetch = async (req, res) => {
   try {
@@ -53,19 +54,19 @@ const create = async (req, res) => {
       return res.status(403).json({ message: "Only Job Listers can create postings" });
     }
 
-    const { title, agency, description, budget, category, requiredSkills, status, sourceUrl, deadline } = req.body;
+    const { title, agency, description, category, status, sourceUrl } = req.body;
 
     const project = await Project.create({
       title,
       agency,
       description,
-      budget,
       category,
-      requiredSkills: requiredSkills || [],
       status: status || "Public",
       sourceUrl,
-      deadline,
       publisherId: req.user._id,
+      ...pendingTorExtraction(),
+      analysisHold: false,
+      procurementStatus: "unknown",
     });
 
     res.status(201).json(project);
@@ -85,13 +86,13 @@ const update = async (req, res) => {
       return res.status(403).json({ message: "Forbidden" });
     }
 
-    const EDITABLE_FIELDS = ["title", "agency", "description", "budget", "category", "requiredSkills", "status", "sourceUrl", "deadline"];
+    const EDITABLE_FIELDS = ["title", "agency", "description", "category", "status", "sourceUrl"];
     const patch = {};
     for (const field of EDITABLE_FIELDS) {
       if (req.body[field] !== undefined) patch[field] = req.body[field];
     }
     if (patch.sourceUrl !== undefined && patch.sourceUrl !== project.sourceUrl) {
-      Object.assign(patch, { analysisStatus: "pending", descriptions: "", requiredSkills: [],
+      Object.assign(patch, { ...pendingTorExtraction(), analysisHold: false, procurementStatus: "unknown", analysisStatus: "pending", descriptions: "", requiredSkills: [],
         aiAnalysis: {}, analysisError: "", analysisErrorCode: "", analysisRetryCount: 0, nextAnalysisAt: null,
         analysisLease: null, analysisLeaseUntil: null, analyzedAt: null });
     }

@@ -19,8 +19,13 @@ test('blank search only browses verified open procurement; Thai and object IDs w
   assert.equal(browse.page, 2);
   assert.equal(browse.limit, 20);
   assert.equal(browse.query.status, 'Public');
+  assert.equal(browse.query.source, 'bangkok-egp');
+  assert.equal(browse.query.procurementMethod.$regex, 'e-bidding');
   assert.equal(browse.query.procurementStatus, 'open');
   assert.equal(browse.query.dataVerified, true);
+  assert.equal(browse.query.analysisStatus, 'completed');
+  assert.deepEqual(browse.query.budget, { $type: 'number', $gt: 0 });
+  assert.equal(browse.query['aiAnalysis.fieldResults.announcedAt.status'], 'found');
   assert.equal(browse.query.$and[0].$or[0].deadline.$gt, now);
   assert.equal(browse.query.documents.$elemMatch.kind, 'tor');
   const thai = await buildProjectQuery({ search: 'ระบบ' }, async () => []);
@@ -41,19 +46,23 @@ test('Buddhist closing-year filter uses Bangkok year boundaries and cannot revea
   assert.equal(range.query.deadline.$lte.toISOString(), '2026-10-07T16:59:59.999Z');
 });
 
-test('unknown deadline is a separate filter and rejects misleading date combinations', async () => {
-  const { query } = await buildProjectQuery({ availability: 'unknown' }, async () => []);
-  assert.equal(query.deadline, null);
-  assert.deepEqual(query.procurementStatus.$in, ['open', 'unknown']);
-  for (const params of [{ status: 'Draft' }, { availability: 'closed' }, { sort: 'bad' }, { deadlineYear: 'NaN' }, { deadlineFrom: '2026-02-30' }, { deadlineFrom: '2026-10-08', deadlineTo: '2026-10-07' }, { availability: 'unknown', deadlineYear: '2569' }]) await assert.rejects(buildProjectQuery(params, async () => []), { status: 400 });
+test('search rejects unknown or expired availability and malformed filters', async () => {
+  for (const params of [{ status: 'Draft' }, { availability: 'all' }, { availability: 'unknown' }, { availability: 'closed' }, { sort: 'bad' }, { deadlineYear: 'NaN' }, { deadlineFrom: '2026-02-30' }, { deadlineFrom: '2026-10-08', deadlineTo: '2026-10-07' }]) await assert.rejects(buildProjectQuery(params, async () => []), { status: 400 });
 });
 
 test('agency and budget filters combine, including a zero budget', async () => {
   const { query } = await buildProjectQuery({ agency: 'Dept. A', minBudget: '0', maxBudget: '1000' }, async () => []);
-  assert.deepEqual(query.budget, { $gte: 0, $lte: 1000 });
+  assert.deepEqual(query.budget, { $type: 'number', $gt: 0, $gte: 0, $lte: 1000 });
   const agency = new RegExp(query.agency.$regex, query.agency.$options);
   assert.ok(agency.test('dept. A'));
   assert.ok(!agency.test('DeptX A'));
+});
+
+test('a method filter cannot widen the feed beyond Bangkok e-bidding', async () => {
+  const { query } = await buildProjectQuery({ method: 'เฉพาะเจาะจง' }, async () => []);
+  assert.equal(query.source, 'bangkok-egp');
+  assert.equal(query.procurementMethod.$regex, 'e-bidding');
+  assert.ok(query.$and.some(part => part.procurementMethod));
 });
 
 test('rejects malformed filters and unsafe pagination', async () => {

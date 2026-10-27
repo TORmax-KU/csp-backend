@@ -22,22 +22,26 @@ const ALLOWED_SOURCES = [
   "gistda-procurement",
 ];
 
-function publicProjectQuery(now = new Date(), mode = "open") {
+function publicProjectQuery(now = new Date()) {
   const base = {
     status: "Public", dataVerified: true,
     source: { $in: ALLOWED_SOURCES }, classification: "software",
     sourceVerifiedAt: { $gte: new Date(now.getTime() - MAX_AGE_MS) },
     documents: { $elemMatch: { kind: "tor", url: { $regex: "^https://" }, verifiedAt: { $gte: new Date(now.getTime() - MAX_AGE_MS) } } },
+    analysisStatus: "completed",
+    title: { $regex: "\\S" },
+    descriptions: { $regex: "\\S" },
+    budget: { $type: "number", $gt: 0 },
+    announcedAt: { $type: "date" },
+    "aiAnalysis.fieldResults.budget.status": "found",
+    "aiAnalysis.fieldResults.announcedAt.status": "found",
+    "aiAnalysis.fieldResults.deadline.status": "found",
   };
   const open = { procurementStatus: "open", $or: [
     { deadlinePrecision: "datetime", deadline: { $gt: now } },
     { deadlinePrecision: { $ne: "datetime" }, deadline: { $gte: bangkokDayStart(now) } },
   ] };
   // Keep eligibility separate from text search and optional date bounds.
-  if (mode === "all") return { ...base, $and: [{ $or: [
-    open, { procurementStatus: { $in: ["open", "unknown"] }, deadline: null },
-  ] }] };
-  if (mode === "unknown") return { ...base, procurementStatus: { $in: ["open", "unknown"] }, deadline: null };
   return { ...base, procurementStatus: "open", $and: [open] };
 }
 

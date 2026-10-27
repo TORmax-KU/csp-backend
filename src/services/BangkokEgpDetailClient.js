@@ -48,6 +48,17 @@ const fetchAnnouncements = async (projectId, { fetchImpl } = {}) => {
   }));
 };
 
+const fetchTors = async (projectId, { fetchImpl } = {}) => {
+  const url = `${API_BASE}/ProjectTors/GetTorInProject?pageNo=1&pageSize=100&projectId=${encodeURIComponent(projectId)}`;
+  const payload = await fetchJson(url, fetchImpl);
+  if (payload?.hasNextPage) throw new Error("Too many TOR records; manual selection required");
+  return (payload?.data || []).filter(row => row.projectTorPath).map(row => ({
+    title: "TOR",
+    url: attachmentUrl(row.projectTorId || row.id, row.projectTorPath),
+    kind: "tor",
+  }));
+};
+
 const deriveProcurementStatus = (announcements) => {
   const sorted = [...announcements].sort(
     (a, b) => new Date(a.publishDate) - new Date(b.publishDate)
@@ -65,6 +76,10 @@ const toTorDocuments = (announcements) =>
   announcements
     .filter((a) => a.url && TOR_PATTERN.test(a.type))
     .filter((a) => !CANCEL_PATTERN.test(a.type) && !AWARD_PATTERN.test(a.type))
+    .sort((a, b) => {
+      const priority = row => /ประกาศเชิญชวน/.test(row.type) ? 0 : /ร่าง/.test(row.type) ? 2 : 1;
+      return priority(a) - priority(b) || new Date(b.publishDate) - new Date(a.publishDate);
+    })
     .map((a) => ({ title: a.type, url: a.url, kind: "tor" }));
 
 // Reads only the first chunk so large PDFs are not fully downloaded
@@ -90,6 +105,7 @@ module.exports = {
   API_BASE,
   fetchProjectDetail,
   fetchAnnouncements,
+  fetchTors,
   deriveProcurementStatus,
   toTorDocuments,
   verifyPdfUrl,

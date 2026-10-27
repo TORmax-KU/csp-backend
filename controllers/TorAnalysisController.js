@@ -8,7 +8,8 @@ async function queueAnalysis(req, res, next) {
     if (req.user.role !== "Admin") return res.status(403).json({ message: "Admin only" });
     if (!mongoose.isValidObjectId(req.params.id)) return res.status(400).json({ message: "Invalid project ID" });
     if (String(process.env.VERTEX_AI_ENABLED).trim().toLowerCase() !== "true") return res.status(503).json({ message: "Vertex AI worker is disabled; configure credentials and enable it first" });
-    const project = await Project.findOneAndUpdate({ _id: req.params.id, analysisStatus: { $ne: "processing" } },
+    if (await Project.exists({ _id: req.params.id, analysisHold: true })) return res.status(409).json({ message: "Pending corrected TOR extraction; analysis is on hold" });
+    const project = await Project.findOneAndUpdate({ _id: req.params.id, analysisHold: { $ne: true }, analysisStatus: { $ne: "processing" } },
       { $set: { analysisStatus: "pending", analysisError: "", analysisErrorCode: "", analysisRetryCount: 0 },
         $unset: { nextAnalysisAt: 1 } }, { returnDocument: "after" });
     if (!project) {

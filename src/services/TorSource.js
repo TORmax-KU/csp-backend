@@ -2,13 +2,14 @@ const cheerio = require("cheerio");
 const { analysisError } = require("./AnalysisErrors");
 const ORIGIN = "https://egp2.bangkok.go.th";
 const MAX_BYTES = 15 * 1024 * 1024;
+const MAX_ANALYSIS_BYTES = 20 * 1024 * 1024;
 
 function checkedUrl(value) {
   const url = new URL(value);
-  const hosts = (process.env.TOR_ALLOWED_HOSTS || "egp2.bangkok.go.th,adminapiegp.bangkok.go.th")
+  const hosts = (process.env.TOR_ALLOWED_HOSTS || "egp2.bangkok.go.th,adminapiegp.bangkok.go.th,bidding.egat.co.th,process.gprocurement.go.th,process3.gprocurement.go.th,process5.gprocurement.go.th")
     .split(",").map(s => s.trim().toLowerCase());
   if (url.protocol !== "https:" || url.username || url.password || (url.port && url.port !== "443") || !hosts.includes(url.hostname)) {
-    throw new Error("TOR URL must use HTTPS on a configured TOR_ALLOWED_HOSTS host");
+    throw analysisError("UNSUPPORTED_DOCUMENT", "TOR URL must use HTTPS on a configured TOR_ALLOWED_HOSTS host");
   }
   return url;
 }
@@ -42,35 +43,46 @@ async function readJson(url) {
   return JSON.parse((await download(url)).bytes.toString("utf8"));
 }
 
-async function loadTor(sourceUrl) {
-  const source = checkedUrl(sourceUrl);
+async function loadTor(sourceUrl, knownDocuments = []) {
+  const source = checkedUrl(sourceUrl.replace(/^http:/i, "https:"));
   let urls = [];
   const detail = source.pathname.match(/^\/project-detail\/([^/]+)\/?$/);
   if (source.origin === ORIGIN && detail) {
     const query = `?pageNo=1&pageSize=100&projectId=${encodeURIComponent(detail[1])}`;
     const tors = await readJson(`${ORIGIN}/appapi/api/ProjectTors/GetTorInProject${query}`);
     if (tors.hasNextPage) throw new Error("Too many TOR records; manual document selection required");
-    urls = (tors.data || []).filter(row => row.projectTorPath)
+    const torUrls = (tors.data || []).filter(row => row.projectTorPath)
       .map(row => attachmentUrl(row.projectTorId || row.id, row.projectTorPath));
-    if (!urls.length) {
+    // Publication and submission dates often exist only in the invitation PDF.
+    {
       const announcements = await readJson(`${ORIGIN}/appapi/api/ProjectAnnouncements/GetAnnouncementDetailInProject${query}`);
       if (announcements.hasNextPage) throw new Error("Too many announcements; manual selection required");
       urls = (announcements.data || [])
-        .filter(row => /TOR|ขอบเขต|ประกวดราคา|เอกสารซื้อหรือจ้าง/i.test(row.masterAnnounceTypeName || ""))
+        .filter(row => /TOR|ขอบเขต|ประกวดราคา|เอกสารซื้อหรือจ้าง|เชิญชวน/i.test(row.masterAnnounceTypeName || ""))
+        .filter(row => !/ยกเลิก|ผู้ชนะ|ผลผู้/.test(row.masterAnnounceTypeName || ""))
         .filter(row => row.projectAnnouncementRssLink || row.projectAnnouncementPath)
+        .sort((a, b) => {
+          const priority = row => /ประกาศเชิญชวน/.test(row.masterAnnounceTypeName || "") ? 0 : /ร่าง/.test(row.masterAnnounceTypeName || "") ? 2 : 1;
+          return priority(a) - priority(b) || new Date(b.projectAnnouncementPublishDate) - new Date(a.projectAnnouncementPublishDate);
+        })
         .map(row => attachmentUrl(row.id, row.projectAnnouncementRssLink || row.projectAnnouncementPath));
     }
+    urls.push(...torUrls);
   } else {
-    urls = [source.href];
+    urls = [...new Set(knownDocuments.filter(d => ["tor", "announcement"].includes(d.kind) && d.url).map(d => d.url.replace(/^http:/i, "https:")))];
+    if (!urls.length) urls = [source.href];
   }
-  urls = [...new Set(urls)];
+  urls = [...new Set(urls)].slice(0, 5);
   if (!urls.length) throw analysisError("NO_TOR_DOCUMENT", "No public TOR attachment found at sourceUrl");
-  if (urls.length > 5) throw analysisError("DOCUMENT_LIMIT", "More than 5 TOR attachments; manual selection required");
   const documents = [];
+  let analysisBytes = 0;
   for (const url of urls) {
     const document = await download(url);
     if (document.bytes.subarray(0, 5).toString() === "%PDF-") {
-      documents.push(document);
+      if (analysisBytes + document.bytes.length <= MAX_ANALYSIS_BYTES) {
+        documents.push(document);
+        analysisBytes += document.bytes.length;
+      }
     } else {
       const $ = cheerio.load(document.bytes.toString("utf8"));
       const links = [...new Set($("a[href]").map((_, el) => {
@@ -82,13 +94,14 @@ async function loadTor(sourceUrl) {
       for (const link of links) {
         const pdf = await download(link);
         if (pdf.bytes.subarray(0, 5).toString() !== "%PDF-") throw new Error("Attachment is not a PDF");
-        documents.push(pdf);
+        if (analysisBytes + pdf.bytes.length <= MAX_ANALYSIS_BYTES) {
+          documents.push(pdf);
+          analysisBytes += pdf.bytes.length;
+        }
       }
     }
   }
-  if (documents.length > 5 || documents.reduce((n, d) => n + d.bytes.length, 0) > 20 * 1024 * 1024) {
-    throw analysisError("DOCUMENT_LIMIT", "Combined TOR attachments exceed analysis limits");
-  }
+  if (!documents.length) throw analysisError("DOCUMENT_LIMIT", "No TOR PDF fits within analysis limits");
   return documents;
 }
 

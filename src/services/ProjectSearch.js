@@ -12,10 +12,12 @@ async function buildProjectQuery(params, findSkillIds, now = new Date()) {
   if (!Number.isSafeInteger(page) || page < 1 || !Number.isSafeInteger(limit) || limit < 1 || limit > 100 || !Number.isSafeInteger((page - 1) * limit)) {
     invalid("Page must be a positive integer and limit must be between 1 and 100");
   }
-  if (params.availability && !["all", "open", "unknown"].includes(params.availability)) invalid("Invalid availability");
+  if (params.availability && params.availability !== "open") invalid("Only open, fully analyzed TORs are searchable");
   if (params.status && params.status !== "Public") invalid("Only public projects are searchable");
   if (params.sort && !["deadline", "newest", "budget"].includes(params.sort)) invalid("Invalid sort");
-  const query = publicProjectQuery(now, params.availability);
+  const query = publicProjectQuery(now);
+  query.source = "bangkok-egp";
+  query.procurementMethod = { $regex: "e-bidding", $options: "i" };
   const search = (params.search || "").trim();
   if (search.length > 300) invalid("Search must be 300 characters or fewer");
   if (search) {
@@ -27,7 +29,7 @@ async function buildProjectQuery(params, findSkillIds, now = new Date()) {
     if (skillIds.length) query.$or.push({ requiredSkills: { $in: skillIds } });
   }
   if (params.agency?.trim()) query.agency = literalRegex(params.agency.trim());
-  if (params.method?.trim()) query.procurementMethod = literalRegex(params.method.trim());
+  if (params.method?.trim()) query.$and.push({ procurementMethod: literalRegex(params.method.trim()) });
   if (params.status) query.status = params.status;
   if (params.priceFlag) query.priceFlag = params.priceFlag;
   for (const [key, operator] of [["minBudget", "$gte"], ["maxBudget", "$lte"]]) {
@@ -62,7 +64,6 @@ async function buildProjectQuery(params, findSkillIds, now = new Date()) {
   }
   if (bounds.$gte > bounds.$lte) invalid("Deadline range is reversed or outside the selected year");
   if (Object.keys(bounds).length) {
-    if (params.availability === "unknown") invalid("Unknown deadlines cannot be filtered by date");
     query.deadline = { ...query.deadline, ...bounds };
   }
   return { query, page, limit };

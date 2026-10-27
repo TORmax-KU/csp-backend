@@ -25,6 +25,11 @@ test('public query requires source verification and a recently verified TOR', ()
   assert.deepEqual(query.source, { $in: ['gprocurement', 'bangkok-egp', 'egat-bidding', 'ieat-procurement', 'gistda-procurement'] });
   assert.equal(query.documents.$elemMatch.kind, 'tor');
   assert.equal(query.documents.$elemMatch.verifiedAt.$gte.getTime(), now - MAX_AGE_MS);
+  assert.equal(query.analysisStatus, 'completed');
+  assert.equal(query.descriptions.$regex, '\\S');
+  assert.equal(query['aiAnalysis.fieldResults.budget.status'], 'found');
+  assert.equal(query['aiAnalysis.fieldResults.announcedAt.status'], 'found');
+  assert.equal(query['aiAnalysis.fieldResults.deadline.status'], 'found');
 });
 
 test('Thai fiscal year rolls over in October Bangkok time', () => {

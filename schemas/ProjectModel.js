@@ -17,6 +17,7 @@ const ProjectSchema = new mongoose.Schema({
     descriptions: { type: String, default: "" },
     analysisStatus: { type: String, enum: ["pending", "processing", "completed", "failed", "awaiting_documents", "needs_review", "retry_pending"], default: "pending", index: true },
     analysisAttempts: { type: Number, default: 0 },
+    analysisHold: { type: Boolean, default: false },
     analysisRetryCount: { type: Number, default: 0 },
     nextAnalysisAt: Date,
     analysisErrorCode: { type: String, default: "" },
@@ -31,6 +32,7 @@ const ProjectSchema = new mongoose.Schema({
         unmappedSkillNames: [String],
         documentUrls: [String],
         noMandatorySkillsReason: String,
+        fieldResults: mongoose.Schema.Types.Mixed,
         skillEvidence: [{
             _id: false,
             name: String,

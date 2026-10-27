@@ -72,6 +72,7 @@ test("enrichment stores verified TOR documents and derived status", async () => 
     logs: { create: async () => ({}) },
     detail: async () => ({ procurementMethod: "ประกวดราคาอิเล็กทรอนิกส์ (e-bidding)", referencePrice: 840000, sourceStatus: "ระหว่างดำเนินการ" }),
     announcements: async () => [invitation],
+    tors: async () => [],
     verify: async () => true,
   });
 
@@ -97,6 +98,7 @@ test("enrichment keeps projects unverified when no TOR PDF opens", async () => {
     logs: { create: async () => ({}) },
     detail: async () => ({ sourceStatus: "ระหว่างดำเนินการ" }),
     announcements: async () => [invitation],
+    tors: async () => [],
     verify: async () => false,
   });
 
@@ -112,6 +114,7 @@ test("enrichment failure of one project does not stop the batch", async () => {
     logs: { create: async () => ({}) },
     detail: async (id) => { if (id === "bad") throw new Error("HTTP 500"); return {}; },
     announcements: async () => [],
+    tors: async () => [],
     verify: async () => true,
   });
 

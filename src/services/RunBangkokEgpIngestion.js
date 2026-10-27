@@ -1,11 +1,12 @@
 const { fetchProjects, SOURCE } = require("./BangkokEgpClient");
 const { ingestRecords } = require("./IngestionPipeline");
 const IngestionLog = require("../models/IngestionLog");
+const { budgetYear: currentBudgetYear } = require("./GprocurementClient");
 
 const runBangkokEgpIngestion = async ({
-  budgetYear = Number(process.env.EGP_BUDGET_YEAR || 2569),
+  budgetYear = Number(process.env.EGP_BUDGET_YEAR || currentBudgetYear()),
   page = 1,
-  pages = Number(process.env.EGP_INGEST_PAGES || 10),
+  pages = Number(process.env.EGP_INGEST_PAGES || 20),
   limit = Number(process.env.EGP_INGEST_LIMIT || 100),
 } = {}) => {
   const startedAt = new Date();

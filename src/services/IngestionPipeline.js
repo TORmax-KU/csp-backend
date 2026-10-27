@@ -1,5 +1,6 @@
 const Project = require("../models/Project");
 const IngestionLog = require("../models/IngestionLog");
+const { pendingTorExtraction } = require("./PendingTorExtraction");
 const {
   FILTER_VERSION,
   classifySoftware,
@@ -14,11 +15,6 @@ const normalizeStatus = (record) => {
   return "Public";
 };
 
-const ensureHttps = (url) => {
-  if (!url) return "";
-  return url.replace(/^http:\/\//i, "https://");
-};
-
 const toProjectDocument = (record, source, sourceUrl, classification) => {
   const finalSourceUrl = record.sourceUrl || sourceUrl;
   const now = new Date();
@@ -26,13 +22,8 @@ const toProjectDocument = (record, source, sourceUrl, classification) => {
   const isFutureDeadline = deadlineDate && !isNaN(deadlineDate.getTime()) && deadlineDate > now;
   const procurementStatus = isFutureDeadline ? "open" : (deadlineDate ? "closed" : "unknown");
 
-  const docUrl = ensureHttps(finalSourceUrl);
-  const documents = record.documents || (docUrl.startsWith("https://") ? [{
-    title: record.title || "เอกสารประกาศ / TOR",
-    url: docUrl,
-    kind: "tor",
-    verifiedAt: now,
-  }] : []);
+  // A project detail page is a source link, not a verified TOR document.
+  const documents = record.documents || [];
 
   return {
     title: String(record.title || "").trim(),
@@ -92,13 +83,14 @@ const ingestRecords = async ({
       const existing = await Project.findOne({
         source: project.source,
         externalId: project.externalId,
-      }).select("_id sourceUrl");
+      }).select("_id sourceUrl analysisHold procurementStatus");
 
       if (existing) {
-        const { publisherId, ...updateFields } = project;
+        // Budget/dates are owned by PDF extraction, never by listing scrapers.
+        const { publisherId, budget, deadline, procurementStatus, documents, dataVerified, sourceVerifiedAt, ...updateFields } = project;
         if (existing.sourceUrl !== project.sourceUrl) {
           // A changed detail URL invalidates prior AI analysis and TOR verification
-          Object.assign(updateFields, { analysisStatus: "pending", descriptions: "", requiredSkills: [],
+          Object.assign(updateFields, { ...pendingTorExtraction(), analysisHold: false, analysisStatus: "pending", descriptions: "", requiredSkills: [],
             aiAnalysis: {}, analysisError: "", analysisErrorCode: "", analysisRetryCount: 0, nextAnalysisAt: null,
             analysisLease: null, analysisLeaseUntil: null, analyzedAt: null,
             dataVerified: false, documents: [], sourceVerifiedAt: null, procurementStatus: "unknown" });
@@ -108,7 +100,7 @@ const ingestRecords = async ({
         }, { runValidators: true });
         counters.projectsUpdated += 1;
       } else {
-        await Project.create(project);
+        await Project.create({ ...project, ...pendingTorExtraction(), analysisHold: false, procurementStatus: "unknown" });
         counters.projectsCreated += 1;
       }
     } catch (error) {

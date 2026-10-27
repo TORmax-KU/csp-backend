@@ -1,0 +1,11 @@
+version: 1
+id: 6388765c-0ff6-412c-a798-f1390aa67ea3
+name: Vertex generateContent extraction test contract
+slug: vertex-generatecontent-extractio
+protocol: http
+interceptRequests: true
+port: 4500
+scenarios:
+  - name: default
+    path: ./handler.js
+    default: true

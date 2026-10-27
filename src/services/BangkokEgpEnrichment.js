@@ -3,6 +3,7 @@ const IngestionLog = require("../models/IngestionLog");
 const {
   fetchProjectDetail,
   fetchAnnouncements,
+  fetchTors,
   deriveProcurementStatus,
   toTorDocuments,
   verifyPdfUrl,
@@ -14,21 +15,21 @@ const MAX_TOR_DOCS = 5;
 const needsEnrichment = (now = new Date()) => ({
   source: "bangkok-egp",
   $or: [
-    { dataVerified: false },
     { sourceVerifiedAt: null },
     { sourceVerifiedAt: { $lt: new Date(now.getTime() - STALE_MS) } },
-    { procurementStatus: "unknown" },
   ],
 });
 
 const enrichOne = async (project, deps) => {
-  const [detail, announcements] = await Promise.all([
+  const [detail, announcements, tors] = await Promise.all([
     deps.detail(project.externalId),
     deps.announcements(project.externalId),
+    deps.tors(project.externalId),
   ]);
 
   const documents = [];
-  for (const doc of toTorDocuments(announcements).slice(0, MAX_TOR_DOCS)) {
+  const candidates = [...toTorDocuments(announcements), ...tors];
+  for (const doc of candidates.filter((d, i) => candidates.findIndex(other => other.url === d.url) === i).slice(0, MAX_TOR_DOCS)) {
     if (await deps.verify(doc.url)) {
       documents.push({ title: doc.title, url: doc.url, kind: "tor", verifiedAt: new Date() });
     }
@@ -40,6 +41,14 @@ const enrichOne = async (project, deps) => {
     dataVerified: documents.length > 0,
     documents,
   };
+  const priorUrls = (project.documents || []).map(doc => doc.url).sort();
+  const currentUrls = documents.map(doc => doc.url).sort();
+  if (documents.length && JSON.stringify(priorUrls) !== JSON.stringify(currentUrls) &&
+    ["awaiting_documents", "failed"].includes(project.analysisStatus)) {
+    update.analysisStatus = "pending";
+    update.analysisError = "";
+    update.analysisErrorCode = "";
+  }
   if (detail.procurementMethod) update.procurementMethod = detail.procurementMethod;
   if (detail.sourceStatus) update.sourceStatus = detail.sourceStatus;
   if (detail.referencePrice !== undefined) update.referencePrice = detail.referencePrice;
@@ -53,20 +62,21 @@ const enrichBangkokProjects = async ({
   logs = IngestionLog,
   detail = fetchProjectDetail,
   announcements = fetchAnnouncements,
+  tors = fetchTors,
   verify = verifyPdfUrl,
   now = new Date(),
 } = {}) => {
   const startedAt = new Date();
   const candidates = await projects
     .find(needsEnrichment(now))
-    .sort({ lastScrapedAt: 1 })
+    .sort({ createdAt: -1 })
     .limit(batchSize)
-    .select("_id externalId");
+    .select("_id externalId documents analysisStatus");
 
   const counters = { enriched: 0, failed: 0 };
   for (const project of candidates) {
     try {
-      await enrichOne(project, { projects, detail, announcements, verify });
+      await enrichOne(project, { projects, detail, announcements, tors, verify });
       counters.enriched += 1;
     } catch (error) {
       counters.failed += 1;
