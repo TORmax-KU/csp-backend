@@ -48,6 +48,7 @@ const projectRoutes = require("./routes/project");
 const notificationRoutes = require("./routes/notification");
 const adminRoutes = require("./routes/admin");
 const skillRoutes = require("./routes/skill");
+const bookmarkRoutes = require("./routes/bookmark");
 const { startIngestionScheduler } = require("./services/IngestionScheduler");
 const { startTorAnalysisWorker } = require("./services/TorAnalysisWorker");
 
@@ -57,6 +58,7 @@ app.use("/api/projects", projectRoutes);
 app.use("/api/notifications", notificationRoutes);
 app.use("/api/admin", adminRoutes);
 app.use("/api/skills", skillRoutes);
+app.use("/api/bookmarks", bookmarkRoutes);
 
 mongoose
   .connect(MONGO_URI)
