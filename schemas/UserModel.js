@@ -121,6 +121,12 @@ const UserSchema = new mongoose.Schema({
         trim: true,
         default: "",
     },
+    // Saved projects, newest first.
+    bookmarks: {
+        type: [mongoose.Schema.Types.ObjectId],
+        ref: "Project",
+        default: [],
+    },
 }, {
     collection: "users",
     timestamps: true,
