@@ -11,6 +11,10 @@ const CategoryBenchmarkSchema = new mongoose.Schema({
         type: Number,
         min: 0,
     },
+    medianBudget: {
+        type: Number,
+        min: 0,
+    },
     minBudget: {
         type: Number,
         min: 0,

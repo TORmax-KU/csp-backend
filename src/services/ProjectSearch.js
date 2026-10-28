@@ -1,6 +1,7 @@
 const literalRegex = value => ({ $regex: value.replace(/[.*+?^${}()|[\]\\]/g, "\\$&"), $options: "i" });
 
-const { publicProjectQuery } = require("./ProcurementAvailability");
+const { publicProjectQuery, draftProjectQuery } = require("./ProcurementAvailability");
+const PRICE_FLAGS = ["Normal", "Underpriced", "Overpriced", "ScopeMismatch"];
 
 async function buildProjectQuery(params, findSkillIds, now = new Date()) {
   const invalid = message => { throw Object.assign(new Error(message), { status: 400 }); };
@@ -12,10 +13,11 @@ async function buildProjectQuery(params, findSkillIds, now = new Date()) {
   if (!Number.isSafeInteger(page) || page < 1 || !Number.isSafeInteger(limit) || limit < 1 || limit > 100 || !Number.isSafeInteger((page - 1) * limit)) {
     invalid("Page must be a positive integer and limit must be between 1 and 100");
   }
-  if (params.availability && params.availability !== "open") invalid("Only open, fully analyzed TORs are searchable");
+  if (params.availability && !["open", "draft"].includes(params.availability)) invalid("Only open or draft TORs are searchable");
   if (params.status && params.status !== "Public") invalid("Only public projects are searchable");
   if (params.sort && !["deadline", "newest", "budget"].includes(params.sort)) invalid("Invalid sort");
-  const query = publicProjectQuery(now);
+  if (params.priceFlag && !PRICE_FLAGS.includes(params.priceFlag)) invalid("Invalid priceFlag");
+  const query = params.availability === "draft" ? draftProjectQuery(now) : publicProjectQuery(now);
   query.procurementMethod = { $regex: "e-bidding", $options: "i" };
   const search = (params.search || "").trim();
   if (search.length > 300) invalid("Search must be 300 characters or fewer");

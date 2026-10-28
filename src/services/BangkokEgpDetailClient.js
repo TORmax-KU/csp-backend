@@ -1,5 +1,5 @@
 const { attachmentUrl, checkedUrl } = require("./TorSource");
-const { announcementLabel, announcementPriority, detailTerminalStatus, CANCEL_PATTERN, AWARD_PATTERN, TOR_PATTERN } = require("./BangkokEgpDocumentMetadata");
+const { announcementLabel, announcementPriority, detailTerminalStatus, CANCEL_PATTERN, AWARD_PATTERN, TOR_PATTERN, DRAFT_PATTERN } = require("./BangkokEgpDocumentMetadata");
 
 const ORIGIN = "https://egp2.bangkok.go.th";
 const API_BASE = `${ORIGIN}/appapi/api`;
@@ -68,7 +68,10 @@ const deriveProcurementStatus = (announcements, detail = {}) => {
     (a) => CANCEL_PATTERN.test(a.type) || AWARD_PATTERN.test(a.type)
   );
   if (latestTerminal) return CANCEL_PATTERN.test(latestTerminal.type) ? "cancelled" : "awarded";
-  if (announcements.some((a) => TOR_PATTERN.test(a.type))) return "open";
+  const torAnnouncements = announcements.filter((a) => TOR_PATTERN.test(a.type));
+  // Only a final (non-draft) invitation opens bidding.
+  if (torAnnouncements.some((a) => !DRAFT_PATTERN.test(a.type))) return "open";
+  if (torAnnouncements.length) return "draft";
   return "unknown";
 };
 

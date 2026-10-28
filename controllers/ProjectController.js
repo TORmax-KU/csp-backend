@@ -38,7 +38,9 @@ const fetchById = async (req, res) => {
       .populate("requiredSkills", "name category")
       .populate("publisherId", "username");
 
-    if (!project || project.status !== "Public") return res.status(404).json({ message: "Project not found" });
+    // Government draft TORs are public announcements; a lister's own draft post is not.
+    const visible = project && (project.status === "Public" || (project.status === "Draft" && !project.publisherId));
+    if (!visible) return res.status(404).json({ message: "Project not found" });
 
     res.set("Cache-Control", "no-store");
     res.status(200).json({ ...project.toObject(), availability: availability(project) });
@@ -101,6 +103,11 @@ const update = async (req, res) => {
     // priceFlag is system-managed; only admins may override it
     if (req.body.priceFlag !== undefined && req.user.role === "Admin") {
       patch.priceFlag = req.body.priceFlag;
+      patch.priceFlagOverride = true;
+    }
+    // Hands the flag back to the hourly benchmark run.
+    if (req.body.priceFlagOverride === false && req.user.role === "Admin") {
+      patch.priceFlagOverride = false;
     }
 
     const updated = await Project.findByIdAndUpdate(req.params.id, patch, {

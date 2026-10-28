@@ -51,6 +51,7 @@ const skillRoutes = require("./routes/skill");
 const bookmarkRoutes = require("./routes/bookmark");
 const { startIngestionScheduler } = require("./services/IngestionScheduler");
 const { startTorAnalysisWorker } = require("./services/TorAnalysisWorker");
+const { startPriceBenchmarkScheduler } = require("./services/PriceBenchmarks");
 
 app.use("/auth", authRoutes);
 app.use("/api/users", userRoutes);
@@ -66,6 +67,7 @@ mongoose
     console.log("Connected to MongoDB");
     startIngestionScheduler();
     startTorAnalysisWorker();
+    startPriceBenchmarkScheduler();
   })
   .catch((error) => {
     console.error("MongoDB connection error:", error);

@@ -56,6 +56,38 @@ const EDITABLE_FIELDS = [
   "contactPhone",
 ];
 
+// Self-declared qualifications (FR-02). true = must be a whole number.
+const QUALIFICATION_NUMBER_FIELDS = {
+  minBudget: false,
+  maxBudget: false,
+  teamSize: true,
+  capacity: true,
+};
+
+// Returns the validated patch, or { error } for a 400 response.
+const parseQualificationNumbers = (body, current) => {
+  const patch = {};
+  for (const [field, wholeNumber] of Object.entries(QUALIFICATION_NUMBER_FIELDS)) {
+    const value = body[field];
+    if (value === undefined) continue;
+    if (value === null || value === "") {
+      patch[field] = null;
+      continue;
+    }
+    if (typeof value !== "number" || !Number.isFinite(value) || value < 0 || (wholeNumber && !Number.isInteger(value))) {
+      return { error: `${field} must be a non-negative ${wholeNumber ? "whole number" : "number"}` };
+    }
+    patch[field] = value;
+  }
+
+  const minBudget = patch.minBudget !== undefined ? patch.minBudget : current.minBudget;
+  const maxBudget = patch.maxBudget !== undefined ? patch.maxBudget : current.maxBudget;
+  if (minBudget != null && maxBudget != null && minBudget > maxBudget) {
+    return { error: "minBudget cannot exceed maxBudget" };
+  }
+  return { patch };
+};
+
 const normalizeSkillName = (name) =>
   name.trim().replace(/\s+/g, " ").normalize("NFKC");
 
@@ -180,6 +212,12 @@ const update = async (req, res) => {
       if (req.body[field] !== undefined) patch[field] = req.body[field];
     }
 
+    const qualifications = parseQualificationNumbers(req.body, user);
+    if (qualifications.error) {
+      return res.status(400).json({ message: qualifications.error });
+    }
+    Object.assign(patch, qualifications.patch);
+
     if (req.body.skillNames !== undefined) {
       const parsed = parseSkillNames(req.body.skillNames);
       if (parsed.error) {
@@ -227,4 +265,4 @@ const deleteUser = async (req, res) => {
   }
 };
 
-module.exports = { fetch, fetchById, update, deleteUser };
+module.exports = { fetch, fetchById, update, deleteUser, parseQualificationNumbers };

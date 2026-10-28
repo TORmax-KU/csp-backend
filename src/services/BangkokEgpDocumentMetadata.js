@@ -3,6 +3,8 @@
 const CANCEL_PATTERN = /ยกเลิก/;
 const AWARD_PATTERN = /ผลผู้|ผู้ชนะ|ผู้เสนอราคาที่ได้รับ/;
 const TOR_PATTERN = /TOR|ขอบเขต|ประกวดราคา|เอกสารซื้อหรือจ้าง|เชิญชวน/i;
+// Draft TORs/invitations are published for public hearing before bidding opens.
+const DRAFT_PATTERN = /ร่าง/;
 
 function announcementLabel(row) {
   const type = String(row.masterAnnounceTypeName || "").trim();
@@ -28,4 +30,4 @@ function detailTerminalStatus(detail = {}) {
   return null;
 }
 
-module.exports = { announcementLabel, announcementPriority, detailTerminalStatus, CANCEL_PATTERN, AWARD_PATTERN, TOR_PATTERN };
+module.exports = { announcementLabel, announcementPriority, detailTerminalStatus, CANCEL_PATTERN, AWARD_PATTERN, TOR_PATTERN, DRAFT_PATTERN };

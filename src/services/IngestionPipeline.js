@@ -11,7 +11,8 @@ const normalizeStatus = (record) => {
     .trim()
     .toLowerCase();
 
-  if (["draft", "ร่าง", "อยู่ระหว่างร่าง"].includes(value)) return "Draft";
+  // Same rule as nationalTerminalStatus, so "ร่างประกาศ..." labels are drafts too.
+  if (/ร่าง|draft/i.test(value)) return "Draft";
   return "Public";
 };
 
@@ -97,6 +98,11 @@ const ingestRecords = async ({
         }
         const terminal = nationalTerminalStatus(updateFields.rawData, project.sourceStatus);
         if (terminal) Object.assign(updateFields, { procurementStatus: terminal });
+        else if (existing.procurementStatus === "draft" && (updateFields.rawData?.tero || updateFields.rawData?.govspending)) {
+          // A national draft that moved on is re-verified, and analysis skipped only for being a draft resumes.
+          Object.assign(updateFields, { procurementStatus: "unknown", ...(existing.analysisSkipReason === "Source is draft"
+            ? { analysisStatus: "pending", analysisAutoEligible: true, analysisSkipReason: "" } : {}) });
+        }
         // Listing freshness alone cannot verify document bytes. A recently verified
         // completed analysis is renewed by the dedicated document refresh below.
         if (existing.sourceUrl !== project.sourceUrl) {

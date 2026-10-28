@@ -67,6 +67,20 @@ const ProjectSchema = new mongoose.Schema({
         enum: ["Normal", "Underpriced", "Overpriced", "ScopeMismatch"],
         default: "Normal",
     },
+    // Set when an admin changes priceFlag by hand; benchmark runs then leave it alone.
+    priceFlagOverride: { type: Boolean, default: false },
+    priceAnalysis: {
+        type: new mongoose.Schema({
+            category: String,
+            benchmarkCategory: String,
+            ratio: Number,
+            medianBudget: Number,
+            avgBudget: Number,
+            sampleSize: Number,
+            evaluatedAt: Date,
+        }, { _id: false }),
+        default: null,
+    },
     sourceUrl: {
         type: String,
         trim: true,

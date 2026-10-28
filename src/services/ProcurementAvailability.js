@@ -3,6 +3,7 @@ const TERMINAL = ["closed", "awarded", "cancelled", "draft"];
 const bangkokDayStart = now => new Date(Math.floor((now.getTime() + 7 * 3600000) / 86400000) * 86400000 - 7 * 3600000);
 
 function availability(project, now = new Date()) {
+  if (project.status === "Draft") return "draft";
   if (TERMINAL.includes(project.procurementStatus)) return project.procurementStatus;
   if (project.deadline && Number.isNaN(new Date(project.deadline).getTime())) return "unverified";
   if (project.deadline && (project.deadlinePrecision === "datetime"
@@ -46,4 +47,15 @@ function publicProjectQuery(now = new Date()) {
   return { ...base, procurementStatus: "open", $and: [open] };
 }
 
-module.exports = { availability, publicProjectQuery, MAX_AGE_MS, ALLOWED_SOURCES };
+// Drafts are never analyzed (bids are not open yet), so they cannot meet the
+// open feed's extraction rules; requiring a recent listing keeps stale drafts out.
+function draftProjectQuery(now = new Date()) {
+  return {
+    source: { $in: ALLOWED_SOURCES }, classification: "software",
+    title: { $regex: "\\S" },
+    lastScrapedAt: { $gte: new Date(now.getTime() - MAX_AGE_MS) },
+    $and: [{ $or: [{ status: "Draft" }, { procurementStatus: "draft" }] }],
+  };
+}
+
+module.exports = { availability, publicProjectQuery, draftProjectQuery, MAX_AGE_MS, ALLOWED_SOURCES };
