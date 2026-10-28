@@ -1,7 +1,7 @@
 const { analysisError } = require("./AnalysisErrors");
 const { metadataSchema, validateMetadata } = require("./TorMetadata");
 const SYSTEM_INSTRUCTION = require("./TorExtractionPrompt");
-const PROMPT_VERSION = "tor-pdf-v3-budget-dates";
+const PROMPT_VERSION = "tor-pdf-v4-reading-order";
 
 function validateAnalysis(value, documentCount = 5) {
   if (!value || typeof value.hasTorContent !== "boolean" || typeof value.descriptions !== "string" ||
@@ -39,6 +39,8 @@ async function analyzeTor(documents, skillNames, context = {}, options = {}) {
   const { GoogleGenAI } = require("@google/genai");
   const client = new GoogleGenAI({ ...vertexConfig(), ...options.clientOptions });
   const { PDFParse } = require("pdf-parse");
+  const { getDocument } = await import('pdfjs-dist/legacy/build/pdf.mjs');
+  const { readingOrder } = require('./PdfReadingOrder');
   const pages = [];
   for (const document of documents) {
     const parser = new PDFParse({ data: document.bytes });
@@ -47,12 +49,23 @@ async function analyzeTor(documents, skillNames, context = {}, options = {}) {
       if (text.total > 200) throw analysisError("DOCUMENT_LIMIT", "PDF exceeds 200 pages");
       pages.push(text.pages.map(page => page.text));
     } finally { await parser.destroy(); }
+    const task = getDocument({ data: new Uint8Array(document.bytes), verbosity: 0 });
+    try {
+      const pdf = await task.promise;
+      const layouts = [];
+      for (let page = 1; page <= pdf.numPages; page++) {
+        const content = await (await pdf.getPage(page)).getTextContent();
+        layouts.push(readingOrder(content.items));
+      }
+      // Either extraction must contain the entire quote on its cited page.
+      pages[pages.length - 1] = pages.at(-1).map((raw, i) => ({ raw, layout: layouts[i] }));
+    } finally { await task.destroy(); }
   }
   const request = {
     model: process.env.VERTEX_MODEL,
     contents: [{ role: "user", parts: [
       { text: `Project identification only: ${JSON.stringify({ title: context.title, externalId: context.externalId })}. Existing skill vocabulary (exact names where equivalent): ${JSON.stringify(skillNames)}.` },
-      ...documents.flatMap((d, i) => [{ text: `Document ${i + 1}` }, { inlineData: { mimeType: "application/pdf", data: d.bytes.toString("base64") } }]),
+      ...documents.flatMap((d, i) => [{ text: `Document ${i + 1}: ${pages[i].length} pages. Citation documentIndex is ${i + 1}; page numbers restart at 1 within this PDF. Use physical PDF page numbers, not a printed page number or a combined-document page count.` }, { inlineData: { mimeType: "application/pdf", data: d.bytes.toString("base64") } }]),
     ] }],
     config: {
       temperature: 0,
@@ -69,7 +82,7 @@ async function analyzeTor(documents, skillNames, context = {}, options = {}) {
       } },
     },
   };
-  const normalize = text => String(text).normalize("NFKC").replace(/[^\p{L}\p{N}]/gu, "");
+  const normalize = text => String(text).normalize("NFKC").replace(/[๐-๙]/g, c => String(c.charCodeAt(0) - 0x0e50)).replace(/[^\p{L}\p{N}]/gu, "");
   for (let attempt = 0; attempt < 2; attempt++) {
     const response = await client.models.generateContent(request);
     let value;
@@ -80,12 +93,16 @@ async function analyzeTor(documents, skillNames, context = {}, options = {}) {
       const page = pages[evidence.documentIndex - 1]?.[evidence.page - 1];
       if (page === undefined) return "Cited PDF page does not exist";
       // Scanned PDFs have no text layer; retain the model's visual citation.
-      if (normalize(page).length > 100 && !normalize(page).includes(normalize(evidence.quote))) return "Verbatim quote does not match the cited PDF text layer";
+      if (normalize(page.raw).length > 100 && ![page.raw, page.layout || ''].some(text => normalize(text).includes(normalize(evidence.quote)))) return "Verbatim quote does not match the cited PDF text layer";
       return null;
     };
-    for (const evidence of parsed.skillEvidence) {
-      const issue = citationIssue(evidence);
-      if (issue) throw analysisError("INVALID_AI_RESPONSE", issue);
+    const skillIssues = parsed.skillEvidence.map(evidence => ({ name: evidence.name, ...evidence, issue: citationIssue(evidence) })).filter(e => e.issue);
+    if (skillIssues.length) {
+      if (!attempt) {
+        request.contents[0].parts.push({ text: `Correct these invalid skill citations: ${JSON.stringify(skillIssues)}. Physical page counts by document: ${JSON.stringify(pages.map(p => p.length))}. Re-read the PDFs and return the full schema. Each quote must exist on the specified physical page within its document. Keep only requirements actually supported by the TOR; do not invent evidence.` });
+        continue;
+      }
+      throw analysisError('INVALID_AI_RESPONSE', skillIssues[0].issue);
     }
     for (const [name, field] of Object.entries(parsed.metadata.fields)) {
       if (field.status !== "found") continue;

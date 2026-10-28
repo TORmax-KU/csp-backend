@@ -10,7 +10,7 @@ async function queueAnalysis(req, res, next) {
     if (String(process.env.VERTEX_AI_ENABLED).trim().toLowerCase() !== "true") return res.status(503).json({ message: "Vertex AI worker is disabled; configure credentials and enable it first" });
     if (await Project.exists({ _id: req.params.id, analysisHold: true })) return res.status(409).json({ message: "Pending corrected TOR extraction; analysis is on hold" });
     const project = await Project.findOneAndUpdate({ _id: req.params.id, analysisHold: { $ne: true }, analysisStatus: { $ne: "processing" } },
-      { $set: { analysisStatus: "pending", analysisError: "", analysisErrorCode: "", analysisRetryCount: 0 },
+      { $set: { analysisStatus: "pending", analysisAutoEligible: true, analysisSkipReason: "", analysisError: "", analysisErrorCode: "", analysisRetryCount: 0 },
         $unset: { nextAnalysisAt: 1 } }, { returnDocument: "after" });
     if (!project) {
       return res.status(await Project.exists({ _id: req.params.id }) ? 409 : 404).json({ message: "Project missing or already processing" });

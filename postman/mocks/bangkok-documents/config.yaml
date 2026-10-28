@@ -1,0 +1,10 @@
+version: 1
+name: Bangkok document metadata regression fixtures
+slug: bangkok-documents
+protocol: http
+interceptRequests: true
+port: 4510
+scenarios:
+  - name: default
+    path: ./handler.js
+    default: true

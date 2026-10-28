@@ -1,12 +1,13 @@
 const cheerio = require("cheerio");
 const { analysisError } = require("./AnalysisErrors");
+const { announcementLabel, announcementPriority, CANCEL_PATTERN, AWARD_PATTERN, TOR_PATTERN } = require("./BangkokEgpDocumentMetadata");
 const ORIGIN = "https://egp2.bangkok.go.th";
 const MAX_BYTES = 15 * 1024 * 1024;
 const MAX_ANALYSIS_BYTES = 20 * 1024 * 1024;
 
 function checkedUrl(value) {
   const url = new URL(value);
-  const hosts = (process.env.TOR_ALLOWED_HOSTS || "egp2.bangkok.go.th,adminapiegp.bangkok.go.th,bidding.egat.co.th,process.gprocurement.go.th,process3.gprocurement.go.th,process5.gprocurement.go.th")
+  const hosts = (process.env.TOR_ALLOWED_HOSTS || "egp2.bangkok.go.th,adminapiegp.bangkok.go.th,bidding.egat.co.th,process.gprocurement.go.th,process3.gprocurement.go.th,process5.gprocurement.go.th,run-procurement.terodigital.com")
     .split(",").map(s => s.trim().toLowerCase());
   if (url.protocol !== "https:" || url.username || url.password || (url.port && url.port !== "443") || !hosts.includes(url.hostname)) {
     throw analysisError("UNSUPPORTED_DOCUMENT", "TOR URL must use HTTPS on a configured TOR_ALLOWED_HOSTS host");
@@ -14,15 +15,21 @@ function checkedUrl(value) {
   return url;
 }
 
-async function download(value, redirects = 0) {
+async function download(value, redirects = 0, fetchImpl = fetch) {
   const url = checkedUrl(value);
-  const response = await fetch(url, { redirect: "manual", signal: AbortSignal.timeout(30000) });
+  const response = await fetchImpl(url, { redirect: "manual", signal: AbortSignal.timeout(30000) });
   if (response.status >= 300 && response.status < 400) {
     await response.body?.cancel();
     if (redirects >= 3 || !response.headers.get("location")) throw new Error("Invalid TOR redirect");
-    return download(new URL(response.headers.get("location"), url).href, redirects + 1);
+    return download(new URL(response.headers.get("location"), url).href, redirects + 1, fetchImpl);
   }
-  if (!response.ok) { await response.body?.cancel(); throw new Error(`TOR source HTTP ${response.status}`); }
+  if (!response.ok) {
+    await response.body?.cancel();
+    if (response.status === 404) throw analysisError('NO_TOR_DOCUMENT', 'TOR download is not available yet (HTTP 404)');
+    const error = new Error(`TOR source HTTP ${response.status}`);
+    if ([429, 500, 502, 503, 504].includes(response.status)) error.status = response.status;
+    throw error;
+  }
   const chunks = [];
   let size = 0;
   for await (const chunk of response.body) {
@@ -39,31 +46,35 @@ function attachmentUrl(id, path) {
   return `${ORIGIN}/api/file/${encodeURIComponent(id)}/${encodeURIComponent(path)}`;
 }
 
-async function readJson(url) {
-  return JSON.parse((await download(url)).bytes.toString("utf8"));
+async function readJson(url, fetchImpl) {
+  return JSON.parse((await download(url, 0, fetchImpl)).bytes.toString("utf8"));
 }
 
-async function loadTor(sourceUrl, knownDocuments = []) {
+async function loadTor(sourceUrl, knownDocuments = [], { fetchImpl = fetch } = {}) {
   const source = checkedUrl(sourceUrl.replace(/^http:/i, "https:"));
+  const tero = source.hostname === 'run-procurement.terodigital.com' && source.pathname.match(/^\/announcements\/gprocurement\/(\d{11})\/?$/);
+  if (tero) {
+    const archive = await download(`${source.origin}/announcements/gprocurement/${tero[1]}/document`, 0, fetchImpl);
+    return require('./TeroDocumentArchive').readArchive(archive.bytes, archive.url);
+  }
   let urls = [];
   const detail = source.pathname.match(/^\/project-detail\/([^/]+)\/?$/);
   if (source.origin === ORIGIN && detail) {
     const query = `?pageNo=1&pageSize=100&projectId=${encodeURIComponent(detail[1])}`;
-    const tors = await readJson(`${ORIGIN}/appapi/api/ProjectTors/GetTorInProject${query}`);
+    const tors = await readJson(`${ORIGIN}/appapi/api/ProjectTors/GetTorInProject${query}`, fetchImpl);
     if (tors.hasNextPage) throw new Error("Too many TOR records; manual document selection required");
     const torUrls = (tors.data || []).filter(row => row.projectTorPath)
       .map(row => attachmentUrl(row.projectTorId || row.id, row.projectTorPath));
     // Publication and submission dates often exist only in the invitation PDF.
     {
-      const announcements = await readJson(`${ORIGIN}/appapi/api/ProjectAnnouncements/GetAnnouncementDetailInProject${query}`);
+      const announcements = await readJson(`${ORIGIN}/appapi/api/ProjectAnnouncements/GetAnnouncementDetailInProject${query}`, fetchImpl);
       if (announcements.hasNextPage) throw new Error("Too many announcements; manual selection required");
       urls = (announcements.data || [])
-        .filter(row => /TOR|ขอบเขต|ประกวดราคา|เอกสารซื้อหรือจ้าง|เชิญชวน/i.test(row.masterAnnounceTypeName || ""))
-        .filter(row => !/ยกเลิก|ผู้ชนะ|ผลผู้/.test(row.masterAnnounceTypeName || ""))
+        .filter(row => TOR_PATTERN.test(announcementLabel(row)))
+        .filter(row => !CANCEL_PATTERN.test(announcementLabel(row)) && !AWARD_PATTERN.test(announcementLabel(row)))
         .filter(row => row.projectAnnouncementRssLink || row.projectAnnouncementPath)
         .sort((a, b) => {
-          const priority = row => /ประกาศเชิญชวน/.test(row.masterAnnounceTypeName || "") ? 0 : /ร่าง/.test(row.masterAnnounceTypeName || "") ? 2 : 1;
-          return priority(a) - priority(b) || new Date(b.projectAnnouncementPublishDate) - new Date(a.projectAnnouncementPublishDate);
+          return announcementPriority(announcementLabel(a)) - announcementPriority(announcementLabel(b)) || new Date(b.projectAnnouncementPublishDate) - new Date(a.projectAnnouncementPublishDate);
         })
         .map(row => attachmentUrl(row.id, row.projectAnnouncementRssLink || row.projectAnnouncementPath));
     }
@@ -77,7 +88,7 @@ async function loadTor(sourceUrl, knownDocuments = []) {
   const documents = [];
   let analysisBytes = 0;
   for (const url of urls) {
-    const document = await download(url);
+    const document = await download(url, 0, fetchImpl);
     if (document.bytes.subarray(0, 5).toString() === "%PDF-") {
       if (analysisBytes + document.bytes.length <= MAX_ANALYSIS_BYTES) {
         documents.push(document);
@@ -92,7 +103,7 @@ async function loadTor(sourceUrl, knownDocuments = []) {
       if (!links.length) throw analysisError("NO_TOR_DOCUMENT", "Source returned HTML without a PDF TOR attachment");
       if (links.length + documents.length > 5) throw new Error("Too many PDF attachments");
       for (const link of links) {
-        const pdf = await download(link);
+        const pdf = await download(link, 0, fetchImpl);
         if (pdf.bytes.subarray(0, 5).toString() !== "%PDF-") throw new Error("Attachment is not a PDF");
         if (analysisBytes + pdf.bytes.length <= MAX_ANALYSIS_BYTES) {
           documents.push(pdf);

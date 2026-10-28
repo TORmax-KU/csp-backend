@@ -36,6 +36,9 @@ const toProjectDocument = (record, source, sourceUrl, classification) => {
     source,
     externalId: String(record.externalId || record.id || "").trim(),
     sourceStatus: record.sourceStatus || record.status,
+    procurementMethod: record.procurementMethod,
+    listingAnnouncedAt: record.listingAnnouncedAt ? require('./RecentProcurementWindow').publicationDate(record.listingAnnouncedAt) : undefined,
+    nationalProjectId: record.nationalProjectId,
     classification: "software",
     classificationMethod: `keyword:${FILTER_VERSION}`,
     matchedKeywords: classification.matchedKeywords,
@@ -80,17 +83,27 @@ const ingestRecords = async ({
         continue;
       }
 
-      const existing = await Project.findOne({
-        source: project.source,
-        externalId: project.externalId,
-      }).select("_id sourceUrl analysisHold procurementStatus");
+      const existing = await Project.findOne(project.nationalProjectId
+        ? { $or: [{ nationalProjectId: project.nationalProjectId }, { source: project.source, externalId: project.externalId }] }
+        : { source: project.source, externalId: project.externalId })
+        .select("_id source sourceUrl rawData analysisHold procurementStatus analysisAutoEligible analysisSkipReason");
 
       if (existing) {
         // Budget/dates are owned by PDF extraction, never by listing scrapers.
         const { publisherId, budget, deadline, procurementStatus, documents, dataVerified, sourceVerifiedAt, ...updateFields } = project;
+        if (project.nationalProjectId) {
+          updateFields.source = existing.source;
+          updateFields.rawData = { ...existing.rawData, ...project.rawData };
+        }
+        const terminal = nationalTerminalStatus(updateFields.rawData, project.sourceStatus);
+        if (terminal) Object.assign(updateFields, { procurementStatus: terminal });
+        // Listing freshness alone cannot verify document bytes. A recently verified
+        // completed analysis is renewed by the dedicated document refresh below.
         if (existing.sourceUrl !== project.sourceUrl) {
           // A changed detail URL invalidates prior AI analysis and TOR verification
-          Object.assign(updateFields, { ...pendingTorExtraction(), analysisHold: false, analysisStatus: "pending", descriptions: "", requiredSkills: [],
+          Object.assign(updateFields, { ...pendingTorExtraction(), analysisHold: false,
+            analysisStatus: existing.analysisAutoEligible === false ? "skipped" : "pending",
+            analysisSkipReason: existing.analysisAutoEligible === false ? existing.analysisSkipReason : "", descriptions: "", requiredSkills: [],
             aiAnalysis: {}, analysisError: "", analysisErrorCode: "", analysisRetryCount: 0, nextAnalysisAt: null,
             analysisLease: null, analysisLeaseUntil: null, analyzedAt: null,
             dataVerified: false, documents: [], sourceVerifiedAt: null, procurementStatus: "unknown" });
@@ -100,7 +113,9 @@ const ingestRecords = async ({
         }, { runValidators: true });
         counters.projectsUpdated += 1;
       } else {
-        await Project.create({ ...project, ...pendingTorExtraction(), analysisHold: false, procurementStatus: "unknown" });
+        const terminal = nationalTerminalStatus(project.rawData, project.sourceStatus);
+        await Project.create({ ...project, ...pendingTorExtraction(), analysisHold: false, procurementStatus: terminal || "unknown",
+          ...(terminal ? { analysisStatus: 'skipped', analysisAutoEligible: false, analysisSkipReason: `Source is ${terminal}` } : {}) });
         counters.projectsCreated += 1;
       }
     } catch (error) {
@@ -127,8 +142,19 @@ const ingestRecords = async ({
   });
 };
 
+function nationalTerminalStatus(rawData, sourceStatus) {
+  if (!rawData?.tero && !rawData?.govspending) return null;
+  if (rawData.govspending?.hasContract) return 'awarded';
+  const status = String(sourceStatus || '');
+  if (/ยกเลิก|cancel/i.test(status)) return 'cancelled';
+  if (/ผู้ชนะ|สิ้นสุด|จัดทำสัญญา|ลงนาม|awarded|completed|closed/i.test(status)) return 'awarded';
+  if (/ร่าง|draft/i.test(status)) return 'draft';
+  return null;
+}
+
 module.exports = {
   ingestRecords,
   normalizeStatus,
   toProjectDocument,
+  nationalTerminalStatus,
 };

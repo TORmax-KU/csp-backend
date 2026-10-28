@@ -27,7 +27,7 @@ async function main() {
     if (!mongoose.isValidObjectId(id)) throw new Error("--reanalyze requires a valid project ID");
     if (!apply) { console.log(`Would queue ${id}`); return; }
     const result = await Project.updateOne({ _id: id, analysisStatus: { $nin: ["processing", "pending", "retry_pending"] } },
-      { $set: { analysisStatus: "pending", analysisError: "", analysisErrorCode: "", analysisRetryCount: 0 },
+      { $set: { analysisStatus: "pending", analysisAutoEligible: true, analysisSkipReason: "", analysisError: "", analysisErrorCode: "", analysisRetryCount: 0 },
         $unset: { nextAnalysisAt: 1 } });
     console.log(`Queued ${result.modifiedCount} project(s)`);
   }

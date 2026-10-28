@@ -1,12 +1,10 @@
 const { attachmentUrl, checkedUrl } = require("./TorSource");
+const { announcementLabel, announcementPriority, detailTerminalStatus, CANCEL_PATTERN, AWARD_PATTERN, TOR_PATTERN } = require("./BangkokEgpDocumentMetadata");
 
 const ORIGIN = "https://egp2.bangkok.go.th";
 const API_BASE = `${ORIGIN}/appapi/api`;
 
 // Announcement type names observed on the Bangkok e-GP portal
-const CANCEL_PATTERN = /ยกเลิก/;
-const AWARD_PATTERN = /ผลผู้|ผู้ชนะ|ผู้เสนอราคาที่ได้รับ/;
-const TOR_PATTERN = /TOR|ขอบเขต|ประกวดราคา|เอกสารซื้อหรือจ้าง|เชิญชวน/i;
 
 const fetchJson = async (url, fetchImpl = fetch) => {
   const response = await fetchImpl(url, {
@@ -26,6 +24,7 @@ const fetchProjectDetail = async (projectId, { fetchImpl } = {}) => {
   return {
     projectId: detail.projectId,
     sourceStatus: detail.masterContractAvailableName || detail.masterContractAvailableCode || "",
+    sourceStatusCode: detail.masterContractAvailableCode || "",
     procurementMethod: detail.masterMethodIdName || "",
     goodsCategory: detail.masterGoodsIdName || "",
     procurementType: detail.masterTypeIdName || "",
@@ -40,7 +39,7 @@ const fetchAnnouncements = async (projectId, { fetchImpl } = {}) => {
   if (payload?.hasNextPage) throw new Error("Too many announcements; manual selection required");
   return (payload?.data || []).map((row) => ({
     id: row.id,
-    type: String(row.masterAnnounceTypeName || "").trim(),
+    type: announcementLabel(row),
     publishDate: row.projectAnnouncementPublishDate || null,
     url: (row.projectAnnouncementRssLink || row.projectAnnouncementPath)
       ? attachmentUrl(row.id, row.projectAnnouncementRssLink || row.projectAnnouncementPath)
@@ -59,7 +58,9 @@ const fetchTors = async (projectId, { fetchImpl } = {}) => {
   }));
 };
 
-const deriveProcurementStatus = (announcements) => {
+const deriveProcurementStatus = (announcements, detail = {}) => {
+  const terminal = detailTerminalStatus(detail);
+  if (terminal) return terminal;
   const sorted = [...announcements].sort(
     (a, b) => new Date(a.publishDate) - new Date(b.publishDate)
   );
@@ -77,8 +78,7 @@ const toTorDocuments = (announcements) =>
     .filter((a) => a.url && TOR_PATTERN.test(a.type))
     .filter((a) => !CANCEL_PATTERN.test(a.type) && !AWARD_PATTERN.test(a.type))
     .sort((a, b) => {
-      const priority = row => /ประกาศเชิญชวน/.test(row.type) ? 0 : /ร่าง/.test(row.type) ? 2 : 1;
-      return priority(a) - priority(b) || new Date(b.publishDate) - new Date(a.publishDate);
+      return announcementPriority(a.type) - announcementPriority(b.type) || new Date(b.publishDate) - new Date(a.publishDate);
     })
     .map((a) => ({ title: a.type, url: a.url, kind: "tor" }));
 

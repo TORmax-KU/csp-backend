@@ -19,7 +19,7 @@ test('blank search only browses verified open procurement; Thai and object IDs w
   assert.equal(browse.page, 2);
   assert.equal(browse.limit, 20);
   assert.equal(browse.query.status, 'Public');
-  assert.equal(browse.query.source, 'bangkok-egp');
+  assert.ok(browse.query.source.$in.includes('tero-procurement'));
   assert.equal(browse.query.procurementMethod.$regex, 'e-bidding');
   assert.equal(browse.query.procurementStatus, 'open');
   assert.equal(browse.query.dataVerified, true);
@@ -58,9 +58,9 @@ test('agency and budget filters combine, including a zero budget', async () => {
   assert.ok(!agency.test('DeptX A'));
 });
 
-test('a method filter cannot widen the feed beyond Bangkok e-bidding', async () => {
+test('a method filter cannot widen the feed beyond verified IT e-bidding', async () => {
   const { query } = await buildProjectQuery({ method: 'เฉพาะเจาะจง' }, async () => []);
-  assert.equal(query.source, 'bangkok-egp');
+  assert.ok(query.source.$in.includes('govspending'));
   assert.equal(query.procurementMethod.$regex, 'e-bidding');
   assert.ok(query.$and.some(part => part.procurementMethod));
 });

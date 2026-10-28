@@ -5,20 +5,38 @@ const { loadTor } = require("./TorSource");
 const { analyzeTor, vertexConfig, PROMPT_VERSION } = require("./VertexTorAnalyzer");
 const { ensureRequiredSkills } = require("./SkillMatching");
 const { classifyAnalysisError } = require("./AnalysisErrors");
+const { analysisSkipReason } = require("./AnalysisQueuePolicy");
 
 async function processNext({ projects = Project, skills = Skill, load = loadTor, analyze = analyzeTor, projectId } = {}) {
   const lease = randomUUID();
-  const claim = { ...(projectId ? { _id: projectId } : {}), analysisHold: { $ne: true }, sourceUrl: { $type: "string", $ne: "" }, $or: [
+  const claim = { ...(projectId ? { _id: projectId } : {}), analysisAutoEligible: { $ne: false }, analysisHold: { $ne: true }, sourceUrl: { $type: "string", $ne: "" }, $or: [
     { analysisStatus: "pending" },
     { analysisStatus: "retry_pending", nextAnalysisAt: { $lte: new Date() } },
     { analysisStatus: "processing", analysisLeaseUntil: { $lt: new Date() } },
   ] };
   const project = await projects.findOneAndUpdate(claim, { $set: { analysisStatus: "processing", analysisLease: lease, analysisLeaseUntil: new Date(Date.now() + 15 * 60000), analysisError: "" },
-    $inc: { analysisAttempts: 1 } }, { returnDocument: "after", sort: { createdAt: -1 } });
+    $inc: { analysisAttempts: 1 } }, { returnDocument: "after", sort: { analysisPriority: -1, listingAnnouncedAt: -1, createdAt: -1 } });
   if (!project) return false;
-  const filter = { _id: project._id, analysisHold: { $ne: true }, analysisLease: lease, sourceUrl: project.sourceUrl };
+  const filter = { _id: project._id, analysisAutoEligible: { $ne: false }, analysisHold: { $ne: true }, analysisLease: lease, sourceUrl: project.sourceUrl };
+  const skipReason = analysisSkipReason(project);
+  if (skipReason) {
+    await projects.updateOne(filter, { $set: { analysisStatus: "skipped", analysisAutoEligible: false, analysisSkipReason: skipReason },
+      $unset: { analysisLease: 1, analysisLeaseUntil: 1, nextAnalysisAt: 1 } });
+    console.log(`TOR analysis skipped: ${project._id}; ${skipReason}`);
+    return true;
+  }
   try {
     const documents = await load(project.sourceUrl, project.documents);
+    if (['tero-procurement', 'govspending'].includes(project.source)) {
+      const expired = await require('./InvitationDeadline').expiredInvitation(documents);
+      if (expired) {
+        await projects.updateOne(filter, { $set: { analysisStatus: 'skipped', analysisAutoEligible: false,
+          analysisSkipReason: `Official invitation deadline has passed (${expired.value}); Vertex was not called`,
+          procurementStatus: 'closed' }, $unset: { analysisLease: 1, analysisLeaseUntil: 1, nextAnalysisAt: 1 } });
+        console.log(`TOR analysis skipped expired invitation: ${project._id}`);
+        return true;
+      }
+    }
     const vocabulary = await skills.find({}).select("name").lean();
     const analysis = await analyze(documents, vocabulary.map(s => s.name), { title: project.title, externalId: project.externalId });
     const mapped = await ensureRequiredSkills(analysis, vocabulary, skills);
@@ -30,6 +48,11 @@ async function processNext({ projects = Project, skills = Skill, load = loadTor,
       analysis.metadata.needsReview || !requiredFieldsFound ? "needs_review" : "completed";
     await projects.updateOne(filter, { $set: {
       budget: values.budget,
+      ...(['tero-procurement', 'govspending'].includes(project.source) ? {
+        dataVerified: true, sourceVerifiedAt: analyzedAt, documentCheckedAt: analyzedAt,
+        documents: documents.map(d => ({ title: d.title || 'TOR PDF', url: d.url, kind: d.kind || 'tor', verifiedAt: analyzedAt,
+          sha256: require('node:crypto').createHash('sha256').update(d.bytes).digest('hex') })),
+      } : {}),
       announcedAt: values.announcedAt ? new Date(values.announcedAt) : null,
       deadline: values.deadline ? new Date(values.deadline) : null,
       deadlinePrecision: values.deadlinePrecision,
@@ -38,7 +61,7 @@ async function processNext({ projects = Project, skills = Skill, load = loadTor,
         documentUrls: documents.map(d => d.url), skillEvidence: analysis.skillEvidence || [],
         noMandatorySkillsReason: analysis.noMandatorySkillsReason || "", fieldResults: analysis.metadata.fields },
       analysisStatus: status, analyzedAt, aiModel: process.env.VERTEX_MODEL,
-      aiPromptVersion: PROMPT_VERSION, analysisError: "", analysisErrorCode: "", analysisRetryCount: 0,
+      aiPromptVersion: PROMPT_VERSION, analysisError: "", analysisErrorCode: "", analysisRetryCount: 0, analysisSkipReason: "",
     }, $unset: { analysisLease: 1, analysisLeaseUntil: 1, nextAnalysisAt: 1 } });
     // A concurrent cancellation/award must never be reopened by AI.
     await projects.updateOne({ _id: project._id, analyzedAt, aiPromptVersion: PROMPT_VERSION,
@@ -50,7 +73,7 @@ async function processNext({ projects = Project, skills = Skill, load = loadTor,
     const failure = classifyAnalysisError(error);
     const retries = project.analysisRetryCount || 0;
     const set = { analysisStatus: failure.retryable ? "retry_pending" : failure.status,
-      analysisErrorCode: failure.code, analysisError: String(error.message).slice(0, 1000) };
+      analysisErrorCode: failure.code, analysisError: String(error.message).slice(0, 1000), documentCheckedAt: new Date() };
     const unset = { analysisLease: 1, analysisLeaseUntil: 1 };
     if (failure.retryable) {
       set.analysisRetryCount = retries + 1;
@@ -70,7 +93,7 @@ async function prepareWorker({ projects = Project, authenticate } = {}) {
     await auth.getAccessToken();
   };
   try { await authenticate(); } catch { throw Object.assign(new Error("Google ADC is unavailable. Mount the credential file with docker-compose.vertex.yaml, then restart."), { pauseWorker: true }); }
-  return projects.updateMany({ analysisHold: true, analysisStatus: "pending" }, { $set: { analysisHold: false } });
+  return projects.updateMany({ analysisAutoEligible: { $ne: false }, analysisHold: true, analysisStatus: "pending" }, { $set: { analysisHold: false } });
 }
 
 function startTorAnalysisWorker() {

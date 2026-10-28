@@ -1,0 +1,22 @@
+const assert = require('node:assert/strict');
+const { fetchListings: tero } = require('../src/services/TeroProcurementClient');
+const { fetchListings: gov } = require('../src/services/GovSpendingClient');
+const { loadTor } = require('../src/services/TorSource');
+const { nationalTerminalStatus } = require('../src/services/IngestionPipeline');
+const base = process.env.SIMULATION_URL || 'http://127.0.0.1:4911/procurement';
+const fetchImpl = (url, opts) => { const u = new URL(url); return fetch(`${base}${u.pathname}${u.search}`, opts); };
+(async () => {
+  const opts = { fetchImpl, env: { TERO_API_KEY: 'simulation-only', GOVSPENDING_API_KEY: 'simulation-only' }, keywords: ['software'], now: new Date('2026-10-28T04:00:00Z') };
+  const t = await tero(opts); assert.equal(t.records.length, 1); assert.equal(t.records[0].externalId, '69109156238');
+  const g = await gov(opts); assert.equal(g.records.length, 1); assert.equal(g.records[0].nationalProjectId, t.records[0].nationalProjectId);
+  assert.equal(nationalTerminalStatus(g.records[0].rawData, g.records[0].sourceStatus), 'awarded');
+  assert.ok(!JSON.stringify(g.records).includes('simulation-only'));
+  assert.ok(!JSON.stringify(g.records).includes('contract_finish_date'));
+  const docs = await loadTor(t.records[0].sourceUrl, [], { fetchImpl });
+  assert.deepEqual(docs.map(d => d.kind), ['announcement', 'tor', 'tor']);
+  assert.ok(docs.every(d => d.url.includes('#file=')));
+  assert.ok(!docs.some(d => /Bond|quotation/.test(d.title)));
+  await assert.rejects(tero({ ...opts, keywords: ['error'] }), /HTTP 503/);
+  await assert.rejects(gov({ ...opts, env: { GOVSPENDING_API_KEY: 'invalid' } }), /HTTP 401/);
+  console.log('National procurement simulation passed: cutoff, pagination contract, auth, safe provenance, matching IDs, terminal status, ZIP selection and upstream errors.');
+})().catch(error => { console.error(error); process.exitCode = 1; });

@@ -1,0 +1,10 @@
+version: 1
+name: National procurement contract fixtures
+slug: national-procurement
+protocol: http
+interceptRequests: true
+port: 4511
+scenarios:
+  - name: default
+    path: ./handler.js
+    default: true

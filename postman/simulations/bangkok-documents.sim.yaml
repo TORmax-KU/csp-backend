@@ -1,0 +1,7 @@
+simulation: bangkok-documents
+routing: path
+mocks:
+  - name: bangkok-documents
+    routeKey: bangkok
+    origin: egp2.bangkok.go.th
+    path: postman/mocks/bangkok-documents/config.yaml

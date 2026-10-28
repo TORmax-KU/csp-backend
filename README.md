@@ -35,29 +35,20 @@ in a single backend process are skipped; use one ingestion-enabled backend per D
 For the root Docker stack, run `docker compose up -d --build`. Compose overrides
 the Mongo host to `mongo` and maps backend port 5000 to host port 5001.
 
-## National e-GP migration: source access is currently blocked
+## Active source imports
 
-The old Bangkok e-GP scheduler is retired and cannot repopulate old records.
-On 2026-10-05 the national e-GP public announcement API returned
-`{"validateCfTurnTile":false}`. The new client detects this as
-`SOURCE_ACCESS_REQUIRED`, logs a failed attempt, and shows an explicit message
-on the website. It does **not** treat this response as a successful empty import.
-No CAPTCHA bypass, token generation or synthetic project seeding is implemented.
+Bangkok e-GP, EGAT, IEAT and GISTDA run at startup and every five minutes.
+The direct national e-GP search importer has been removed. Its old
+`GPROC_INGESTION_ENABLED` and `GPROC_ANNOUNCEMENT_TOKEN` settings are unused.
+Use `INGESTION_ENABLED=false` to disable all automatic imports, or each source's
+`BANGKOK_INGESTION_ENABLED`, `EGAT_INGESTION_ENABLED`, `IEAT_INGESTION_ENABLED`, or
+`GISTDA_INGESTION_ENABLED` flag independently. Overlapping runs of the same
+source are skipped. The existing admin `/ingestion/egp` route runs Bangkok.
 
-**Automatic import of real projects is not complete.** Authorized source access
-or representative official exports are still needed to verify detail fields,
-bid-closing timestamps, project status and original TOR links. Even if search
-access becomes available, search-only rows are held back with
-`SOURCE_DETAILS_REQUIRED`; they cannot establish that a project is open or has a
-working TOR. A short-lived announcement token alone is not a permanent integration.
-`GPROC_ANNOUNCEMENT_TOKEN` can provide legitimately obtained access for further
-integration verification; never commit it. Set `GPROC_INGESTION_ENABLED=false`
-to disable the automatic source checks.
-
-The scheduler currently probes the software search for the current Thai fiscal
-year. Full keyword coverage, pagination, detail/document ingestion and status
-refresh must be completed after access is available. Do not claim the scraper is
-production-ready or promise teammates their database will populate yet.
+The public feed currently accepts only verified Bangkok software/IT e-bidding
+projects with complete analysis and future deadlines. Importing a listing does
+not by itself establish its deadline or verify its TOR. New source candidates
+must pass document and eligibility checks before publication.
 
 ## Public data rules
 
@@ -203,6 +194,24 @@ the match endpoint resolves the current catalog without another AI call. The sto
 
 ### Source support and limits
 
+Automatic analysis can be disabled per project with `analysisAutoEligible=false`.
+The `skipped` state records deliberately excluded jobs, with an `analysisSkipReason`.
+New projects default to automatic eligibility. The worker skips known expired,
+awarded, cancelled, closed, or draft bids before loading documents or calling AI;
+an unknown deadline still requires extraction. Listing refreshes cannot re-enable
+an excluded backlog record. An explicit admin retry or
+`node scripts/repair-tor-analysis.js --apply --reanalyze PROJECT_ID` re-enables it,
+while deadline/status checks still apply.
+
+To prepare a limited batch with Vertex disabled, run
+`node scripts/select-recent-analysis.js --limit 20 --plan tmp/batch-UNIQUE_NAME.json`.
+Review that snapshot, then add `--apply` with the same `--plan` path. The snapshot
+preserves prior queue fields and exact selected IDs. Completed output is retained;
+only eligible selected records are queued. Keep the backend stopped during the
+preview/apply sequence; use a one-off Compose container with
+`-e VERTEX_AI_ENABLED=false` if its normal environment enables AI. See `lastest.md`
+for the batch already applied to this local database.
+
 Statuses distinguish `awaiting_documents` (missing TOR/scope), `needs_review`
 (document limits or malformed model output), `retry_pending` (temporary errors),
 and `failed` (permanent errors/exhausted retries). No-skills results are valid only
@@ -221,6 +230,14 @@ public hostnames only; do not add internal services). Redirects are revalidated.
 HTML-only TORs, inaccessible documents, non-PDF files, and missing scope fail visibly.
 PDFs are sent in memory to Vertex AI and are not stored in MongoDB or on disk.
 
+Bangkok document resolution falls back to attachment filenames when the source
+omits announcement type labels. Winner/cancellation filenames cannot qualify as
+TOR documents. Official detail statuses C01 (contract/PO prepared), C04 (work
+delivered), and S5 (cancelled) exclude those records from open opportunities.
+The local `bangkok-documents` Postman simulation and
+`scripts/test-bangkok-documents-simulation.js` exercise these mappings and the
+document resolver over HTTP without paid AI calls.
+
 Limits: 5 attachments, 15 MiB per download, 20 MiB combined, 30-second source request
 timeout, 120-second AI timeout. Oversize sources fail rather than silently truncate.
 No automatic email delivery is included. Match is technical skill coverage, not
@@ -231,3 +248,29 @@ Run `npm test` for source, validation, worker and percentage regression checks.
 
 Official setup references: [Google Gen AI SDK](https://github.com/googleapis/js-genai)
 and [Vertex AI quickstart](https://cloud.google.com/vertex-ai/generative-ai/docs/start/quickstart).
+
+
+### National discovery providers
+
+Tero and GovSpending run on startup and every five minutes. Both apply a rolling
+**two calendar month publication cutoff in Asia/Bangkok**, including the cutoff
+and allowing future publication dates. Existing historical records are retained.
+
+Configure `TERO_API_KEY` and `GOVSPENDING_API_KEY` locally. For local testing only,
+`TERO_ALLOW_PUBLIC_DEV_KEY=true` retrieves the development key explicitly published
+in Tero's docs; production needs a dedicated provider key. The OpenD profile key
+belongs in `GOVSPENDING_API_KEY`. Never put keys into source URLs or commit `.env`.
+Individual flags are `TERO_INGESTION_ENABLED` and `GOVSPENDING_INGESTION_ENABLED`.
+
+Tero supplies document archives. GovSpending supplies metadata/contracts and
+resolves candidate documents through Tero by national project ID. Contract dates
+are never submission deadlines. Records from both providers merge on national
+identity. Missing or ambiguous PDF evidence stays off the public feed. Read
+`docs/procurement-source-evaluation.md` for live findings and coverage limits.
+
+With Vertex enabled and ADC mounted, the worker runs automatically, prioritizes
+newer publication dates, skips known terminal/expired bids, and retries rate limits.
+Monitor it with `docker compose exec -T backend node scripts/report-national-ingestion.js`.
+The recurring run continues while Docker is running. The Postman simulation is
+`postman/simulations/national-procurement.sim.yaml`; its companion context file
+contains the local verification commands.

@@ -36,14 +36,14 @@ const enrichOne = async (project, deps) => {
   }
 
   const update = {
-    procurementStatus: deriveProcurementStatus(announcements),
+    procurementStatus: deriveProcurementStatus(announcements, detail),
     sourceVerifiedAt: new Date(),
     dataVerified: documents.length > 0,
     documents,
   };
   const priorUrls = (project.documents || []).map(doc => doc.url).sort();
   const currentUrls = documents.map(doc => doc.url).sort();
-  if (documents.length && JSON.stringify(priorUrls) !== JSON.stringify(currentUrls) &&
+  if (project.analysisAutoEligible !== false && documents.length && JSON.stringify(priorUrls) !== JSON.stringify(currentUrls) &&
     ["awaiting_documents", "failed"].includes(project.analysisStatus)) {
     update.analysisStatus = "pending";
     update.analysisError = "";
@@ -71,7 +71,7 @@ const enrichBangkokProjects = async ({
     .find(needsEnrichment(now))
     .sort({ createdAt: -1 })
     .limit(batchSize)
-    .select("_id externalId documents analysisStatus");
+    .select("_id externalId documents analysisStatus analysisAutoEligible");
 
   const counters = { enriched: 0, failed: 0 };
   for (const project of candidates) {

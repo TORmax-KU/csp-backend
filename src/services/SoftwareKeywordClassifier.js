@@ -1,4 +1,4 @@
-const FILTER_VERSION = "technology-keywords-v3";
+const FILTER_VERSION = "technology-keywords-v4";
 
 const POSITIVE_KEYWORDS = [
   "software",
@@ -68,7 +68,9 @@ const classifySoftware = (record) => {
   );
 
   return {
-    isSoftware: matchedKeywords.length > 0 && !/กระดาษ|หมึกพิมพ์|ตลับหมึก|เครื่องเขียน|\b(?:paper|toner|cartridge|stationery)\b/i.test(text),
+    isSoftware: matchedKeywords.length > 0
+      && !(matchedKeywords.every(k => k === 'พัฒนาระบบ') && ['ระบบส่งและจำหน่าย', 'ระบบส่งไฟฟ้า', 'ระบบประปา', 'ระบบระบายน้ำ', 'ระบบปรับอากาศ'].some(term => text.includes(normalizeText(term))))
+      && !/เครื่องเอกซเรย์|เครื่องแปลงสัญญาณภาพเอกซเรย์|กระดาษ|หมึกพิมพ์|ตลับหมึก|เครื่องเขียน|\b(?:paper|toner|cartridge|stationery)\b/i.test(text),
     matchedKeywords,
     hardwareOnlyMatches,
     filterVersion: FILTER_VERSION,

@@ -19,6 +19,7 @@ test('MongoDB returns only open TORs with all AI fields', { skip: !process.env.T
   };
   const cases = [
     ['open', {}], ['expired', { deadline: now }], ['awarded', { procurementStatus: 'awarded' }],
+    ['tero-open', { source: 'tero-procurement' }], ['gov-open', { source: 'govspending' }],
     ['cancelled', { procurementStatus: 'cancelled' }], ['draft', { status: 'Draft' }],
     ['unverified', { dataVerified: false }], ['missing-tor', { documents: [] }],
     ['unknown', { deadline: null }], ['stale', { sourceVerifiedAt: new Date('2026-10-01') }],
@@ -31,12 +32,12 @@ test('MongoDB returns only open TORs with all AI fields', { skip: !process.env.T
     await Project.insertMany(cases.map(([title, patch], index) => ({ ...base, ...patch, title, externalId: String(index) })));
     for (const params of [{}, { deadlineYear: '2569' }, { deadlineFrom: '2026-10-01', deadlineTo: '2026-10-31' }]) {
       const { query } = await buildProjectQuery(params, async () => [], now);
-      assert.deepEqual((await Project.find(query).lean()).map(p => p.title).sort(), ['open']);
+      assert.deepEqual((await Project.find(query).lean()).map(p => p.title).sort(), ['gov-open', 'open', 'tero-open']);
     }
     const searched = await buildProjectQuery({ availability: 'open', search: 'unknown' }, async () => [], now);
     assert.deepEqual((await Project.find(searched.query).lean()).map(p => p.title), []);
     const dated = await buildProjectQuery({ availability: 'open', deadlineYear: '2569' }, async () => [], now);
-    assert.deepEqual((await Project.find(dated.query).lean()).map(p => p.title).sort(), ['open']);
+    assert.deepEqual((await Project.find(dated.query).lean()).map(p => p.title).sort(), ['gov-open', 'open', 'tero-open']);
     const oldYear = await buildProjectQuery({ deadlineYear: '2568' }, async () => [], now);
     assert.equal(await Project.countDocuments(oldYear.query), 0);
     await Project.insertMany([

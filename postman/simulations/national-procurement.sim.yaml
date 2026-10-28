@@ -1,0 +1,6 @@
+simulation: national-procurement
+routing: path
+mocks:
+  - name: national-procurement
+    routeKey: procurement
+    path: postman/mocks/national-procurement/config.yaml

@@ -5,7 +5,7 @@ const ModerationLog = require("../src/models/ModerationLog");
 const IngestionLog = require("../src/models/IngestionLog");
 const Notification = require("../src/models/Notification");
 const Match = require("../src/models/Match");
-const { runOnce, ingestionStatus } = require("../src/services/IngestionScheduler");
+const { runBangkokOnce, ingestionStatus } = require("../src/services/IngestionScheduler");
 
 // FR-14 / Use Case 5: remove a violating post and auto-disable the publisher
 const moderatePost = async (req, res) => {
@@ -102,12 +102,12 @@ const fetchIngestionLogs = async (req, res) => {
   }
 };
 
-// Keep the existing admin route compatible; only the national source is now used.
+// Keep the existing admin route and run the working Bangkok importer.
 const triggerBangkokEgpIngestion = (req, res) => {
   const state = ingestionStatus();
   if (state.status === "running") return res.status(409).json({ message: "Ingestion is already running" });
-  void runOnce();
-  return res.status(202).json({ message: "National e-GP ingestion started", source: "gprocurement" });
+  void runBangkokOnce();
+  return res.status(202).json({ message: "Bangkok e-GP ingestion started", source: "bangkok-egp" });
 };
 
 const setUserStatus = async (req, res) => {

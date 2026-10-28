@@ -50,7 +50,7 @@ test("startup releases pending holds only after credentials pass preflight", asy
   let authenticated = false;
   const projects = { updateMany: async (filter, update) => {
     assert.equal(authenticated, true);
-    assert.deepEqual(filter, { analysisHold: true, analysisStatus: "pending" });
+    assert.deepEqual(filter, { analysisAutoEligible: { $ne: false }, analysisHold: true, analysisStatus: "pending" });
     assert.equal(update.$set.analysisHold, false);
     return { modifiedCount: 570 };
   } };

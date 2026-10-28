@@ -92,7 +92,8 @@ const update = async (req, res) => {
       if (req.body[field] !== undefined) patch[field] = req.body[field];
     }
     if (patch.sourceUrl !== undefined && patch.sourceUrl !== project.sourceUrl) {
-      Object.assign(patch, { ...pendingTorExtraction(), analysisHold: false, procurementStatus: "unknown", analysisStatus: "pending", descriptions: "", requiredSkills: [],
+      Object.assign(patch, { ...pendingTorExtraction(), analysisHold: false, procurementStatus: "unknown",
+        analysisStatus: project.analysisAutoEligible === false ? "skipped" : "pending", descriptions: "", requiredSkills: [],
         aiAnalysis: {}, analysisError: "", analysisErrorCode: "", analysisRetryCount: 0, nextAnalysisAt: null,
         analysisLease: null, analysisLeaseUntil: null, analyzedAt: null });
     }

@@ -16,7 +16,6 @@ async function buildProjectQuery(params, findSkillIds, now = new Date()) {
   if (params.status && params.status !== "Public") invalid("Only public projects are searchable");
   if (params.sort && !["deadline", "newest", "budget"].includes(params.sort)) invalid("Invalid sort");
   const query = publicProjectQuery(now);
-  query.source = "bangkok-egp";
   query.procurementMethod = { $regex: "e-bidding", $options: "i" };
   const search = (params.search || "").trim();
   if (search.length > 300) invalid("Search must be 300 characters or fewer");

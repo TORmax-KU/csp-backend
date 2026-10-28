@@ -15,11 +15,12 @@ function availability(project, now = new Date()) {
 }
 
 const ALLOWED_SOURCES = [
-  "gprocurement",
   "bangkok-egp",
   "egat-bidding",
   "ieat-procurement",
   "gistda-procurement",
+  "tero-procurement",
+  "govspending",
 ];
 
 function publicProjectQuery(now = new Date()) {

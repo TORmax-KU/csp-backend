@@ -1,7 +1,7 @@
 const { fetchProjects, SOURCE } = require("./BangkokEgpClient");
 const { ingestRecords } = require("./IngestionPipeline");
 const IngestionLog = require("../models/IngestionLog");
-const { budgetYear: currentBudgetYear } = require("./GprocurementClient");
+const { budgetYear: currentBudgetYear } = require("./ProcurementCalendar");
 
 const runBangkokEgpIngestion = async ({
   budgetYear = Number(process.env.EGP_BUDGET_YEAR || currentBudgetYear()),

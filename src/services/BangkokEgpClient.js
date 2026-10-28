@@ -1,7 +1,7 @@
 const DEFAULT_SEARCH_URL = "https://egp2.bangkok.go.th/appapi/api/Projects/GetProjectFromFilter";
 const SOURCE = "bangkok-egp";
 const PROJECT_DETAIL_URL = "https://egp2.bangkok.go.th/project-detail";
-const { budgetYear: currentBudgetYear } = require("./GprocurementClient");
+const { budgetYear: currentBudgetYear } = require("./ProcurementCalendar");
 
 const fetchJson = async (url, options = {}) => {
   const controller = new AbortController();
