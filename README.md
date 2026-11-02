@@ -14,7 +14,9 @@ npm run dev
 Copy the example only if you do not already have `.env`. The default connection is
 `mongodb://127.0.0.1:27017/fullstack_db`; change `MONGO_URI` to your own MongoDB URI.
 The backend defaults to port 5001. Browsing does not require Google OAuth or Vertex
-credentials. Google login is unavailable until its credentials are configured.
+credentials. Google login is unavailable until its credentials are configured;
+email/password sign-up (`POST /auth/register`, `POST /auth/login`) always works.
+Passwords are stored as bcrypt hashes and are never returned by the API.
 Set `SESSION_SECRET` for persistent sessions; it is mandatory in production.
 
 In another terminal:

@@ -23,6 +23,12 @@ const UserSchema = new mongoose.Schema({
         lowercase: true,
         trim: true,
     },
+    // bcrypt hash for email/password accounts; Google-only accounts have none.
+    // Never returned unless a query explicitly selects "+passwordHash".
+    passwordHash: {
+        type: String,
+        select: false,
+    },
     aboutMe: {
         type: String,
         default: "",
