@@ -20,9 +20,16 @@ const NotificationSchema = new mongoose.Schema({
         type: Boolean,
         default: false,
     },
+    // NewMatch only
+    matchPercentage: Number,
+    // StatusChange only: project state before and after (e.g. "open" -> "cancelled")
+    fromState: String,
+    toState: String,
 }, {
     collection: "notifications",
     timestamps: true,
 });
+
+NotificationSchema.index({ userId: 1, createdAt: -1 });
 
 module.exports = { NotificationSchema };

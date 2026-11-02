@@ -25,6 +25,16 @@ if (process.env.GOOGLE_CLIENT_ID && process.env.GOOGLE_CLIENT_SECRET) passport.u
     async (accessToken, refreshToken, profile, done) => {
       try {
         let user = await User.findOne({ googleId: profile.id });
+        const email = profile.emails[0];
+
+        // Link Google to an existing email/password account only when Google has verified the address.
+        if (!user && email.verified !== false) {
+          user = await User.findOneAndUpdate(
+            { email: email.value.toLowerCase(), googleId: { $exists: false } },
+            { googleId: profile.id },
+            { new: true }
+          );
+        }
 
         if (!user) {
           user = await User.create({
