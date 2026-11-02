@@ -1,3 +1,4 @@
+const mongoose = require("mongoose");
 const Notification = require("../src/models/Notification");
 
 const fetchForUser = async (req, res) => {
@@ -24,8 +25,14 @@ const fetchForUser = async (req, res) => {
   }
 };
 
+// Marks read by default; send { read: false } to mark unread.
 const markRead = async (req, res) => {
   try {
+    if (!mongoose.isValidObjectId(req.params.id)) return res.status(404).json({ message: "Notification not found" });
+    if (req.body?.read !== undefined && typeof req.body.read !== "boolean") {
+      return res.status(400).json({ message: "read must be a boolean" });
+    }
+
     const notification = await Notification.findById(req.params.id);
     if (!notification) return res.status(404).json({ message: "Notification not found" });
 
@@ -33,7 +40,7 @@ const markRead = async (req, res) => {
       return res.status(403).json({ message: "Forbidden" });
     }
 
-    notification.read = true;
+    notification.read = req.body?.read ?? true;
     await notification.save();
 
     res.status(200).json(notification);
@@ -53,4 +60,19 @@ const markAllRead = async (req, res) => {
   }
 };
 
-module.exports = { fetchForUser, markRead, markAllRead };
+const remove = async (req, res) => {
+  try {
+    if (!mongoose.isValidObjectId(req.params.id)) return res.status(404).json({ message: "Notification not found" });
+
+    // Scoped to the owner, so another user's id simply reports not found.
+    const result = await Notification.deleteOne({ _id: req.params.id, userId: req.user._id });
+    if (!result.deletedCount) return res.status(404).json({ message: "Notification not found" });
+
+    res.status(200).json({ message: "Notification deleted" });
+  } catch (error) {
+    console.error("Delete notification error:", error);
+    res.status(500).json({ error: "Server error while deleting notification" });
+  }
+};
+
+module.exports = { fetchForUser, markRead, markAllRead, remove };

@@ -114,6 +114,22 @@ status, verified documents, qualifications, deliverables, source skill names,
 contact details and submission location. Fields missing from the source remain
 missing in the UI; AI summaries are separately labeled and cannot supply dates.
 
+## Vendor matching and notifications
+
+`src/services/MatchingEngine.js` compares every active Vendor with saved skills
+against the open public feed at startup, every five minutes, and right after the
+vendor saves skills, budget range or match threshold. A TOR matches when the
+vendor covers at least `matchThreshold`% (default 75) of its mandatory skills,
+using the same score as `GET /api/projects/:id/match`, and its budget sits inside
+the vendor's `minBudget`–`maxBudget` when those are set.
+
+- A new match creates a `NewMatch` notification. Matches that stop qualifying
+  while the TOR is still open are dropped silently.
+- A matched TOR moving between open, closed, awarded, cancelled and draft
+  creates a `StatusChange` notification. The transient `unknown` state is ignored.
+- Each event notifies once, even across concurrent runs or several backends.
+- Set `MATCHING_ENABLED=false` to stop the sweep. Notifications are in-app only.
+
 ## Vertex AI TOR analysis
 
 Uses `@google/genai` with Vertex AI and Application Default Credentials (ADC).

@@ -1,5 +1,6 @@
 const User = require("../src/models/User");
 const Skill = require("../src/models/Skill");
+const { runMatching } = require("../src/services/MatchingEngine");
 
 const MAX_USER_SKILLS = 30;
 const MAX_SKILL_NAME_LENGTH = 60;
@@ -54,7 +55,14 @@ const EDITABLE_FIELDS = [
   "dailyDigestEmail",
   "smsAlerts",
   "contactPhone",
+  "minBudget",
+  "maxBudget",
+  "teamSize",
+  "capacity",
 ];
+
+// Changing any of these re-runs matching for the user (Use Case 2).
+const MATCHING_FIELDS = ["skillNames", "minBudget", "maxBudget", "matchThreshold"];
 
 const normalizeSkillName = (name) =>
   name.trim().replace(/\s+/g, " ").normalize("NFKC");
@@ -194,6 +202,11 @@ const update = async (req, res) => {
       new: true,
       runValidators: true,
     }).populate("proficiency");
+
+    if (MATCHING_FIELDS.some((field) => req.body[field] !== undefined)) {
+      runMatching({ userIds: [updated._id] }).catch((error) =>
+        console.error("Profile re-match error:", error));
+    }
 
     res.status(200).json(updated);
   } catch (error) {
