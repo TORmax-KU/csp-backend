@@ -1,6 +1,6 @@
 const test = require("node:test");
 const assert = require("node:assert/strict");
-const { runMatching, trackedState } = require("../src/services/MatchingEngine");
+const { runMatching, trackedState, budgetFit, createSweeper } = require("../src/services/MatchingEngine");
 
 const query = rows => ({ select: () => ({ lean: async () => rows.map(row => ({ ...row })) }) });
 
@@ -93,4 +93,50 @@ test("trackedState reports drafts and hides transient unknown", () => {
   assert.equal(trackedState({ status: "Draft", procurementStatus: "open" }), "draft");
   assert.equal(trackedState({ status: "Public", procurementStatus: "unknown" }), null);
   assert.equal(trackedState({ status: "Public", procurementStatus: "awarded" }), "awarded");
+});
+
+
+test("budgetFit places a TOR budget against the vendor's declared range", () => {
+  const range = { minBudget: 100000, maxBudget: 5000000 };
+  assert.equal(budgetFit({ budget: 50000 }, range), "below");
+  assert.equal(budgetFit({ budget: 9000000 }, range), "above");
+  assert.equal(budgetFit({ budget: 100000 }, range), "within");
+  assert.equal(budgetFit({ budget: 9000000 }, {}), "within");
+  assert.equal(budgetFit({}, range), "unknown");
+});
+
+const quietLog = { log() {}, error() {} };
+const tick = () => new Promise(resolve => setImmediate(resolve));
+
+test("requestMatching is a no-op until the scheduler starts, and is disabled by MATCHING_ENABLED=false", async () => {
+  let runs = 0;
+  const sweeper = createSweeper({ run: async () => { runs += 1; return {}; }, log: quietLog });
+  assert.equal(sweeper.requestMatching(0), false);
+  sweeper.startMatchingScheduler({ MATCHING_ENABLED: "false" });
+  assert.equal(sweeper.requestMatching(0), false);
+  await tick();
+  assert.equal(runs, 0);
+});
+
+test("requests are debounced into one sweep, and a request during a sweep queues one follow-up", async () => {
+  let runs = 0;
+  let release;
+  const sweeper = createSweeper({ run: () => { runs += 1; return new Promise(resolve => { release = () => resolve({}); }); }, log: quietLog });
+  const timer = sweeper.startMatchingScheduler({});
+  clearInterval(timer);
+  assert.equal(runs, 1); // startup sweep, still running
+
+  // While the startup sweep runs, a burst of requests collapses into one pending timer...
+  assert.equal(sweeper.requestMatching(0), true);
+  assert.equal(sweeper.requestMatching(0), false);
+  await new Promise(resolve => setTimeout(resolve, 5));
+  // ...whose sweep finds one already running, so it is queued rather than run concurrently.
+  assert.equal(runs, 1);
+
+  release();
+  await tick();
+  assert.equal(runs, 2); // the queued follow-up
+  release();
+  await tick();
+  assert.equal(runs, 2);
 });

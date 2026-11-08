@@ -8,12 +8,22 @@ const { resolveSkills, calculateMatch } = require("./SkillMatching");
 
 const DEFAULT_THRESHOLD = 75;
 const SWEEP_INTERVAL_MS = 5 * 60 * 1000;
+// Covers the worker's follow-up write that opens a TOR right after marking its analysis completed.
+const REQUEST_DEBOUNCE_MS = 30 * 1000;
 const defaultModels = { projects: Project, users: User, skills: Skill, matches: Match, notifications: Notification };
 
 // State a vendor is told about. "unknown" is transient while a TOR is re-verified, so it is never reported.
 function trackedState(project) {
   if (project.status === "Draft") return "draft";
   return project.procurementStatus === "unknown" ? null : project.procurementStatus;
+}
+
+// Where a TOR's budget sits against the vendor's declared range. "unknown" (no budget) never excludes a match.
+function budgetFit(project, user) {
+  if (typeof project.budget !== "number") return "unknown";
+  if (user.minBudget != null && project.budget < user.minBudget) return "below";
+  if (user.maxBudget != null && project.budget > user.maxBudget) return "above";
+  return "within";
 }
 
 // FR-08: skill coverage must reach the vendor's threshold and the budget must sit inside their declared range.
@@ -27,10 +37,7 @@ function scoreProject(project, user, catalog) {
     aiAnalysis: { ...project.aiAnalysis, unmappedSkillNames: resolved.unmappedSkillNames } }, user.proficiency);
 
   if (result.matchPercentage === null || result.matchPercentage < (user.matchThreshold ?? DEFAULT_THRESHOLD)) return null;
-  if (typeof project.budget === "number") {
-    if (user.minBudget != null && project.budget < user.minBudget) return null;
-    if (user.maxBudget != null && project.budget > user.maxBudget) return null;
-  }
+  if (["below", "above"].includes(budgetFit(project, user))) return null;
   return result;
 }
 
@@ -118,27 +125,51 @@ async function runMatching({ userIds, now = new Date(), models = defaultModels }
   return counts;
 }
 
-function startMatchingScheduler() {
-  if (String(process.env.MATCHING_ENABLED ?? "true").trim().toLowerCase() === "false") return;
+// One sweep at a time per process. A request that arrives mid-sweep queues one follow-up sweep,
+// because the running sweep may have read its candidate TORs before the change it was told about.
+function createSweeper({ run = runMatching, log = console } = {}) {
+  let active = false;
   let running = false;
-  const tick = async () => {
-    if (running) return;
+  let rerun = false;
+  let pending = null;
+
+  async function sweep() {
+    if (running) { rerun = true; return; }
     running = true;
     try {
-      const counts = await runMatching();
+      const counts = await run();
       if (counts.newMatches || counts.removed || counts.statusChanges) {
-        console.log(`Matching: ${counts.newMatches} new, ${counts.removed} removed, ${counts.statusChanges} status changes`);
+        log.log(`Matching: ${counts.newMatches} new, ${counts.removed} removed, ${counts.statusChanges} status changes`);
       }
     } catch (error) {
-      console.error("Matching sweep failed:", error.message);
+      log.error("Matching sweep failed:", error.message);
     } finally {
       running = false;
+      if (rerun) { rerun = false; void sweep(); }
     }
-  };
-  const timer = setInterval(tick, SWEEP_INTERVAL_MS);
-  timer.unref();
-  void tick();
-  return timer;
+  }
+
+  // Debounced so a batch of TORs finishing analysis triggers one sweep, not one per TOR.
+  // A no-op until the scheduler starts (and when MATCHING_ENABLED=false), so scripts and tests never sweep.
+  function requestMatching(delayMs = REQUEST_DEBOUNCE_MS) {
+    if (!active || pending) return false;
+    pending = setTimeout(() => { pending = null; void sweep(); }, delayMs);
+    pending.unref?.();
+    return true;
+  }
+
+  function startMatchingScheduler(env = process.env) {
+    if (String(env.MATCHING_ENABLED ?? "true").trim().toLowerCase() === "false") return;
+    active = true;
+    const timer = setInterval(sweep, SWEEP_INTERVAL_MS);
+    timer.unref();
+    void sweep();
+    return timer;
+  }
+
+  return { sweep, requestMatching, startMatchingScheduler };
 }
 
-module.exports = { runMatching, scoreProject, trackedState, startMatchingScheduler };
+const { requestMatching, startMatchingScheduler } = createSweeper({ run: (...args) => runMatching(...args) });
+
+module.exports = { runMatching, scoreProject, budgetFit, trackedState, startMatchingScheduler, requestMatching, createSweeper, DEFAULT_THRESHOLD };

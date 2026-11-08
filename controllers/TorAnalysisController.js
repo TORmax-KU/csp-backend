@@ -2,6 +2,7 @@ const mongoose = require("mongoose");
 const Project = require("../src/models/Project");
 const { calculateMatch, resolveSkills } = require("../src/services/SkillMatching");
 const Skill = require("../src/models/Skill");
+const { budgetFit, DEFAULT_THRESHOLD } = require("../src/services/MatchingEngine");
 
 async function queueAnalysis(req, res, next) {
   try {
@@ -24,14 +25,24 @@ async function matchSkills(req, res, next) {
     if (!mongoose.isValidObjectId(req.params.id)) return res.status(400).json({ message: "Invalid project ID" });
     const project = await Project.findById(req.params.id).lean();
     if (!project) return res.status(404).json({ message: "Project not found" });
+    const catalog = await Skill.find({}).select("name").lean();
     // Re-resolve against the current catalog so admin-added skills need no paid re-analysis.
     if (project.analysisStatus === "completed" && project.aiAnalysis?.mandatorySkillNames?.length) {
-      const mapped = resolveSkills(project.aiAnalysis.mandatorySkillNames, await Skill.find({}).select("name").lean());
+      const mapped = resolveSkills(project.aiAnalysis.mandatorySkillNames, catalog);
       project.requiredSkills = mapped.requiredSkills;
       project.aiAnalysis.unmappedSkillNames = mapped.unmappedSkillNames;
     }
-    res.json({ projectId: project._id, ...calculateMatch(project, req.user.proficiency),
-      unmappedSkillNames: project.aiAnalysis?.unmappedSkillNames || [] });
+    const result = calculateMatch(project, req.user.proficiency);
+    const names = new Map(catalog.map(skill => [String(skill._id), skill.name]));
+    const named = ids => ids.map(id => ({ _id: id, name: names.get(id) })).filter(skill => skill.name);
+    const matchThreshold = req.user.matchThreshold ?? DEFAULT_THRESHOLD;
+    const budget = budgetFit(project, req.user);
+    res.json({ projectId: project._id, ...result,
+      unmappedSkillNames: project.aiAnalysis?.unmappedSkillNames || [],
+      matchedSkills: named(result.matchedSkillIds), missingSkills: named(result.missingSkillIds),
+      matchThreshold, budgetFit: budget,
+      // Same rule as the matching engine, so this page agrees with match alerts.
+      isMatch: result.matchPercentage !== null && result.matchPercentage >= matchThreshold && !["below", "above"].includes(budget) });
   } catch (error) { next(error); }
 }
 module.exports = { queueAnalysis, matchSkills };
