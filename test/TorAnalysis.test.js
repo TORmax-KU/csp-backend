@@ -101,7 +101,8 @@ function workerFixture() {
 
 test("worker persists summary, resolved IDs and document provenance", async () => {
   const fixture = workerFixture();
-  await processNext({ ...fixture, load: async () => [{ url: "https://egp2.bangkok.go.th/tor.pdf" }],
+  let matchingRequests = 0;
+  await processNext({ ...fixture, onCompleted: () => { matchingRequests += 1; }, load: async () => [{ url: "https://egp2.bangkok.go.th/tor.pdf" }],
     analyze: async () => ({ hasTorContent: true, descriptions: "สรุป TOR", mandatorySkills: ["Java", "Unknown"], metadata: {
       values: { budget: 1000000, announcedAt: "2026-10-01", deadline: "2026-11-01T12:00:00+07:00", deadlinePrecision: "datetime" },
       fields: { budget: { status: "found" }, announcedAt: { status: "found" }, deadline: { status: "found" } }, needsReview: false,
@@ -114,11 +115,13 @@ test("worker persists summary, resolved IDs and document provenance", async () =
   assert.equal(result.deadline.toISOString(), "2026-11-01T05:00:00.000Z");
   assert.deepEqual(result.requiredSkills, ["skill"]);
   assert.deepEqual(result.aiAnalysis.unmappedSkillNames, ["Unknown"]);
+  // A completed TOR is newly scorable, so the worker asks for a matching sweep.
+  assert.equal(matchingRequests, 1);
 });
 
 test("worker marks an analyzed TOR with missing required fields for review", async () => {
   const fixture = workerFixture();
-  await processNext({ ...fixture, load: async () => [{ url: "https://egp2.bangkok.go.th/tor.pdf" }],
+  await processNext({ ...fixture, onCompleted: () => assert.fail("only completed TORs trigger matching"), load: async () => [{ url: "https://egp2.bangkok.go.th/tor.pdf" }],
     analyze: async () => ({ hasTorContent: true, descriptions: "สรุป TOR", mandatorySkills: [],
       metadata: require("../src/services/TorMetadata").validateMetadata(metadata(), 1) }) });
   assert.equal(fixture.writes[0].$set.analysisStatus, "needs_review");
