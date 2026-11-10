@@ -48,6 +48,11 @@ const ProjectSchema = new mongoose.Schema({
         type: Number,
         min: 0,
     },
+    // Lower end of a direct posting's budget range; `budget` holds the ceiling.
+    budgetMin: {
+        type: Number,
+        min: 0,
+    },
     category: {
         type: String,
         trim: true,
@@ -66,6 +71,22 @@ const ProjectSchema = new mongoose.Schema({
         type: String,
         enum: ["Normal", "Underpriced", "Overpriced", "ScopeMismatch"],
         default: "Normal",
+    },
+    // FR-09: how priceFlag was derived. Null until enough comparable budgets exist.
+    priceAnalysis: {
+        type: new mongoose.Schema({
+            category: String,
+            benchmarkCategory: String,
+            ratio: Number,
+            medianBudget: Number,
+            q1Budget: Number,
+            q3Budget: Number,
+            avgBudget: Number,
+            sampleSize: Number,
+            scopeSkills: Number,
+            evaluatedAt: Date,
+        }, { _id: false }),
+        default: null,
     },
     sourceUrl: {
         type: String,

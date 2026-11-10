@@ -56,8 +56,11 @@ test("lists only the caller's matches on open TORs, best match first, then soone
   t.mock.method(Project, "find", (filter) => {
     // Restricted to the caller's matched TORs and to the public open-feed rules.
     assert.deepEqual(filter._id.$in.sort(), [A, B, C, CLOSED].sort());
-    assert.equal(filter.procurementStatus, "open");
-    assert.equal(filter.analysisStatus, "completed");
+    const [government, direct] = filter.$or;
+    assert.equal(government.procurementStatus, "open");
+    assert.equal(government.analysisStatus, "completed");
+    assert.equal(direct.source, "direct");
+    assert.equal(direct.procurementStatus, "open");
     // The open-feed query filtered out CLOSED.
     return chain([
       { _id: A, title: "A", procurementStatus: "open", deadline: deadline(20) },

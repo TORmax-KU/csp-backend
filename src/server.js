@@ -53,6 +53,7 @@ const matchRoutes = require("./routes/match");
 const { startIngestionScheduler } = require("./services/IngestionScheduler");
 const { startTorAnalysisWorker } = require("./services/TorAnalysisWorker");
 const { startMatchingScheduler } = require("./services/MatchingEngine");
+const { startPriceAnalysisScheduler } = require("./services/PriceAnalysis");
 
 app.use("/auth", authRoutes);
 app.use("/api/users", userRoutes);
@@ -70,6 +71,7 @@ mongoose
     startIngestionScheduler();
     startTorAnalysisWorker();
     startMatchingScheduler();
+    startPriceAnalysisScheduler();
   })
   .catch((error) => {
     console.error("MongoDB connection error:", error);

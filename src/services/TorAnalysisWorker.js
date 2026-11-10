@@ -7,8 +7,12 @@ const { ensureRequiredSkills } = require("./SkillMatching");
 const { classifyAnalysisError } = require("./AnalysisErrors");
 const { analysisSkipReason } = require("./AnalysisQueuePolicy");
 const { requestMatching } = require("./MatchingEngine");
+const { requestPriceAnalysis } = require("./PriceAnalysis");
 
-async function processNext({ projects = Project, skills = Skill, load = loadTor, analyze = analyzeTor, projectId, onCompleted = requestMatching } = {}) {
+// A completed TOR is newly scorable and adds a confirmed budget to its category benchmark.
+const refreshAfterAnalysis = () => { requestMatching(); requestPriceAnalysis(); };
+
+async function processNext({ projects = Project, skills = Skill, load = loadTor, analyze = analyzeTor, projectId, onCompleted = refreshAfterAnalysis } = {}) {
   const lease = randomUUID();
   const claim = { ...(projectId ? { _id: projectId } : {}), analysisAutoEligible: { $ne: false }, analysisHold: { $ne: true }, sourceUrl: { $type: "string", $ne: "" }, $or: [
     { analysisStatus: "pending" },
@@ -69,7 +73,7 @@ async function processNext({ projects = Project, skills = Skill, load = loadTor,
       procurementStatus: { $nin: ["awarded", "cancelled", "draft"] } }, { $set: {
       procurementStatus: values.deadline ? "open" : "unknown",
     } });
-    // A completed TOR is newly scorable, so match it now instead of waiting for the next sweep.
+    // Match and price it now instead of waiting for the next sweeps.
     if (status === "completed") onCompleted();
     console.log(`TOR analysis ${status}: ${project._id}; budget=${analysis.metadata.fields.budget.status}, publication=${analysis.metadata.fields.announcedAt.status}, deadline=${analysis.metadata.fields.deadline.status}`);
   } catch (error) {
