@@ -1,4 +1,5 @@
 const { recentWindow, isRecentPublication } = require('./RecentProcurementWindow');
+const { fetchSource } = require('./SourceFetch');
 const ORIGIN = 'https://run-procurement.terodigital.com';
 const SOURCE = 'tero-procurement';
 let publicDevKey;
@@ -31,9 +32,11 @@ async function fetchListings({ fetchImpl = fetch, env = process.env, now = new D
     for (let offset = 0; ; offset += 500) {
       const url = new URL(`${ORIGIN}/api/announcements`);
       for (const [k, v] of Object.entries({ keyword, date_from: dateFrom, watchlist: false, ministry_watched: false, limit: 500, offset })) url.searchParams.set(k, v);
-      const response = await fetchImpl(url, { headers: { 'X-API-Key': key }, redirect: 'error', signal: AbortSignal.timeout(40000) });
-      if (!response.ok) throw new Error(`Tero listing HTTP ${response.status}`);
-      const body = await response.json();
+      // NFR-04: 30 s to start responding, then a bounded download.
+      const body = await fetchSource(url, { headers: { 'X-API-Key': key }, redirect: 'error' }, { fetchImpl, read: async response => {
+        if (!response.ok) throw new Error(`Tero listing HTTP ${response.status}`);
+        return response.json();
+      } });
       if (!Array.isArray(body.data) || !Number.isFinite(Number(body.meta?.total))) throw new Error('Invalid Tero pagination response');
       for (const row of body.data) {
         if (!isRecentPublication(row.announce_date, cutoff)) continue;

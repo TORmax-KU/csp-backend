@@ -99,7 +99,7 @@ async function prepareWorker({ projects = Project, authenticate } = {}) {
     const auth = new GoogleAuth({ scopes: ["https://www.googleapis.com/auth/cloud-platform"] });
     await auth.getAccessToken();
   };
-  try { await authenticate(); } catch { throw Object.assign(new Error("Google ADC is unavailable. Mount the credential file with docker-compose.vertex.yaml, then restart."), { pauseWorker: true }); }
+  try { await authenticate(); } catch { throw Object.assign(new Error("Google ADC is unavailable. Set GOOGLE_ADC_HOST_PATH before `docker compose up` (or run gcloud auth application-default login locally), then restart."), { pauseWorker: true }); }
   return projects.updateMany({ analysisAutoEligible: { $ne: false }, analysisHold: true, analysisStatus: "pending" }, { $set: { analysisHold: false } });
 }
 

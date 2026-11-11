@@ -90,3 +90,14 @@ test('origin filter separates direct postings from government TORs', async () =>
   const flagged = await buildProjectQuery({ priceFlag: 'ScopeMismatch' }, async () => []);
   assert.equal(flagged.query.priceFlag, 'ScopeMismatch');
 });
+
+test('NFR-09: skill filter matches catalog, AI-extracted and publisher skill names alongside search', async () => {
+  // The catalog lookup runs for both the text search and the skill filter; only "React" is a skill.
+  const { query } = await buildProjectQuery({ skill: ' React ', search: 'portal' }, async regex =>
+    new RegExp(regex.$regex, regex.$options).test('react') ? ['react-id'] : []);
+  assert.ok(query.$or.some(clause => clause.title), 'text search stays separate');
+  const skill = query.$and.find(part => part.$or?.some(clause => clause.sourceSkillNames));
+  assert.ok(skill.$or.some(clause => clause['aiAnalysis.mandatorySkillNames']));
+  assert.deepEqual(skill.$or.at(-1), { requiredSkills: { $in: ['react-id'] } });
+  await assert.rejects(buildProjectQuery({ skill: 'x'.repeat(61) }, async () => []), { status: 400 });
+});

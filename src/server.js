@@ -6,7 +6,7 @@ const cors = require("cors");
 const session = require("express-session");
 const { MongoStore } = require("connect-mongo");
 const passport = require("./config/passport");
-const { randomBytes } = require("node:crypto");
+const { sessionOptions, idleTimeout, SESSION_IDLE_MS } = require("./config/session");
 
 const app = express();
 
@@ -24,21 +24,10 @@ app.use(
 );
 app.use(express.json());
 
-app.use(
-  session({
-    secret: process.env.SESSION_SECRET || (() => {
-      if (process.env.NODE_ENV === "production") throw new Error("SESSION_SECRET is required in production");
-      console.warn("Using an ephemeral development session secret; configure SESSION_SECRET for persistent logins.");
-      return randomBytes(32).toString("hex");
-    })(),
-    resave: false,
-    saveUninitialized: false,
-    store: MongoStore.create({ mongoUrl: MONGO_URI }),
-    cookie: {
-      maxAge: 1000 * 60 * 60 * 24 * 7, // 7 days
-    },
-  })
-);
+app.use(session(sessionOptions({
+  store: MongoStore.create({ mongoUrl: MONGO_URI, ttl: SESSION_IDLE_MS / 1000 }),
+})));
+app.use(idleTimeout());
 app.use(passport.initialize());
 app.use(passport.session());
 

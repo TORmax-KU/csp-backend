@@ -39,7 +39,7 @@ const runBangkokEgpIngestion = async ({
       sourceUrl,
       budgetYear,
       status: "Failed",
-      errorMessage: error.message,
+      errorMessage: `${error.code || "SOURCE_UNAVAILABLE"}: ${error.message}`,
       startedAt,
       finishedAt: new Date(),
       durationMs: Date.now() - startedAt.getTime(),

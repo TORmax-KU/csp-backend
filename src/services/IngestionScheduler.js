@@ -4,6 +4,7 @@ const { enrichBangkokProjects } = require('./BangkokEgpEnrichment');
 const { runEgatBiddingIngestion, runIeatIngestion, runGistdaIngestion } = require('./RunMultiSourceIngestion');
 const SCHEDULE = '*/5 * * * *';
 const { runTeroIngestion, runGovSpendingIngestion } = require('./RunNationalSourcesIngestion');
+const { createIngestionMonitor } = require('./IngestionHealth');
 
 async function ingestBangkok() {
   const log = await runBangkokEgpIngestion();
@@ -17,7 +18,7 @@ function createScheduler({ schedule = cron.schedule, env = process.env, runners 
   'bangkok-egp': ingestBangkok, 'egat-bidding': runEgatBiddingIngestion,
   'ieat-procurement': runIeatIngestion, 'gistda-procurement': runGistdaIngestion,
   'tero-procurement': runTeroIngestion, 'govspending': runGovSpendingIngestion,
-}, logger = console } = {}) {
+}, logger = console, monitor = createIngestionMonitor({ logger }) } = {}) {
   const flags = { 'bangkok-egp': 'BANGKOK_INGESTION_ENABLED', 'egat-bidding': 'EGAT_INGESTION_ENABLED',
     'ieat-procurement': 'IEAT_INGESTION_ENABLED', 'gistda-procurement': 'GISTDA_INGESTION_ENABLED' };
   Object.assign(flags, { 'tero-procurement': 'TERO_INGESTION_ENABLED', govspending: 'GOVSPENDING_INGESTION_ENABLED' });
@@ -26,6 +27,9 @@ function createScheduler({ schedule = cron.schedule, env = process.env, runners 
   }]));
   const tasks = {};
   let started = false;
+  // Failure/empty-result alerts (Open Issue 1). Monitoring problems never affect ingestion.
+  const watch = (source, outcome) => monitor.observe(source, outcome)
+    .catch(error => { logger.error(`${source} ingestion monitor failed:`, error.message); return {}; });
   async function runSource(source) {
     const state = states[source];
     if (state.status === 'running') return;
@@ -33,11 +37,15 @@ function createScheduler({ schedule = cron.schedule, env = process.env, runners 
     try {
       const result = await runners[source]();
       if (result?.status === 'Failed') throw new Error('Source import failed; inspect ingestion logs');
-      Object.assign(state, { status: 'success', lastSuccessAt: new Date().toISOString() });
+      const health = await watch(source, { log: result });
+      Object.assign(state, health.reason === 'empty'
+        ? { status: 'success', code: 'SOURCE_EMPTY' }
+        : { status: 'success', lastSuccessAt: new Date().toISOString() });
       return result;
     } catch (error) {
       Object.assign(state, { status: 'failed', code: error.code || 'SOURCE_UNAVAILABLE' });
       logger.error(`${source} ingestion failed:`, error.message);
+      await watch(source, { error });
     } finally {
       state.nextAttemptAt = tasks[source]?.getNextRun()?.toISOString() || null;
     }

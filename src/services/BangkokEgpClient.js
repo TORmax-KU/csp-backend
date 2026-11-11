@@ -2,24 +2,18 @@ const DEFAULT_SEARCH_URL = "https://egp2.bangkok.go.th/appapi/api/Projects/GetPr
 const SOURCE = "bangkok-egp";
 const PROJECT_DETAIL_URL = "https://egp2.bangkok.go.th/project-detail";
 const { budgetYear: currentBudgetYear } = require("./ProcurementCalendar");
+const { fetchSource } = require("./SourceFetch");
 
-const fetchJson = async (url, options = {}) => {
-  const controller = new AbortController();
-  const timeoutMs = Number(
-    options.timeoutMs || process.env.EGP_REQUEST_TIMEOUT_MS || 120000
-  );
-  const timeout = setTimeout(() => controller.abort(), timeoutMs);
-
-  try {
-    const response = await fetch(url, {
-      headers: {
-        accept: "application/json, text/plain, */*",
-        "user-agent": "TORmax-public-aggregator/1.0",
-        ...(options.headers || {}),
-      },
-      signal: controller.signal,
-    });
-
+// NFR-04: 30 s to start responding; EGP_REQUEST_TIMEOUT_MS bounds downloading a large page.
+const fetchJson = (url, options = {}) => fetchSource(url, {
+  headers: {
+    accept: "application/json, text/plain, */*",
+    "user-agent": "TORmax-public-aggregator/1.0",
+    ...(options.headers || {}),
+  },
+}, {
+  bodyTimeoutMs: Number(options.timeoutMs || process.env.EGP_REQUEST_TIMEOUT_MS || 120000),
+  read: async response => {
     if (!response.ok) {
       throw new Error(`Bangkok EGP returned HTTP ${response.status}`);
     }
@@ -33,10 +27,8 @@ const fetchJson = async (url, options = {}) => {
     }
 
     return response.json();
-  } finally {
-    clearTimeout(timeout);
-  }
-};
+  },
+});
 
 const firstValue = (record, keys) => {
   for (const key of keys) {

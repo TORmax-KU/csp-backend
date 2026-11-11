@@ -4,7 +4,7 @@ const { listedProjectQuery } = require("./ProcurementAvailability");
 
 async function buildProjectQuery(params, findSkillIds, now = new Date()) {
   const invalid = message => { throw Object.assign(new Error(message), { status: 400 }); };
-  for (const key of ["search", "agency", "status", "priceFlag", "minBudget", "maxBudget", "deadline", "deadlineYear", "deadlineFrom", "deadlineTo", "availability", "method", "origin", "sort", "page", "limit"]) {
+  for (const key of ["search", "agency", "status", "priceFlag", "minBudget", "maxBudget", "deadline", "deadlineYear", "deadlineFrom", "deadlineTo", "availability", "method", "origin", "skill", "sort", "page", "limit"]) {
     if (params[key] !== undefined && typeof params[key] !== "string") invalid(`Invalid ${key}`);
   }
   const page = Number(params.page ?? 1);
@@ -27,6 +27,16 @@ async function buildProjectQuery(params, findSkillIds, now = new Date()) {
     if (/^[a-f\d]{24}$/i.test(search)) query.$or.push({ _id: search });
     const skillIds = await findSkillIds(regex);
     if (skillIds.length) query.$or.push({ requiredSkills: { $in: skillIds } });
+  }
+  // NFR-09: filter by tech stack. Matches catalog skills plus skill names from AI extraction or the publisher.
+  const skill = (params.skill || "").trim();
+  if (skill.length > 60) invalid("Skill must be 60 characters or fewer");
+  if (skill) {
+    const regex = literalRegex(skill);
+    const skillClauses = [{ "aiAnalysis.mandatorySkillNames": regex }, { sourceSkillNames: regex }];
+    const skillIds = await findSkillIds(regex);
+    if (skillIds.length) skillClauses.push({ requiredSkills: { $in: skillIds } });
+    query.$and.push({ $or: skillClauses });
   }
   if (params.agency?.trim()) query.agency = literalRegex(params.agency.trim());
   if (params.method?.trim()) query.$and.push({ procurementMethod: literalRegex(params.method.trim()) });

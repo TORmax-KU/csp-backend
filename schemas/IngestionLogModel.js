@@ -18,6 +18,11 @@ const IngestionLogSchema = new mongoose.Schema({
         enum: ["Success", "Failed"],
         required: true,
     },
+    // Listings the source returned before filtering. 0 from a source that normally returns
+    // listings usually means its page markup changed (Open Issue 1).
+    recordsFetched: {
+        type: Number,
+    },
     torsIngested: {
         type: Number,
         default: 0,
