@@ -89,6 +89,28 @@ test("respects each vendor's own threshold and scopes profile-triggered runs", a
   assert.deepEqual(db.notifications.map(n => [n.userId, n.matchPercentage]), [["relaxed", 75]]);
 });
 
+test("removing the last skill clears open and closed matches without notifying or affecting other vendors", async () => {
+  const vendor = { _id: "u1", proficiency: ["react"] };
+  const other = { _id: "u2", proficiency: ["react"] };
+  const projects = [tor("t1", ["React"], 1000000), tor("t2", ["React"], 1000000)];
+  const db = fakeModels({ users: [vendor, other], projects, skills });
+  // Model the real Mongo filter so this regression cannot hide behind a permissive stub.
+  db.models.users.find = filter => query([vendor, other].filter(user =>
+    (!filter._id || filter._id.$in.includes(user._id)) &&
+    (!filter["proficiency.0"] || user.proficiency.length > 0)));
+  await runMatching({ models: db.models });
+  assert.equal(db.matches.length, 4);
+  const notificationsBefore = db.notifications.length;
+  vendor.proficiency = [];
+  Object.assign(projects[1], { open: false, procurementStatus: "cancelled" });
+  assert.deepEqual(await runMatching({ userIds: ["u1"], models: db.models }),
+    { newMatches: 0, removed: 2, statusChanges: 0 });
+  assert.deepEqual(db.matches.map(match => match.userId), ["u2", "u2"]);
+  assert.equal(db.notifications.length, notificationsBefore);
+  vendor.proficiency = ["react"];
+  assert.equal((await runMatching({ models: db.models })).newMatches, 1);
+});
+
 test("trackedState reports drafts and hides transient unknown", () => {
   assert.equal(trackedState({ status: "Draft", procurementStatus: "open" }), "draft");
   assert.equal(trackedState({ status: "Public", procurementStatus: "unknown" }), null);

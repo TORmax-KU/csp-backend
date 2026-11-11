@@ -43,6 +43,8 @@ const UserSchema = new mongoose.Schema({
         enum: ["Active", "Disabled"],
         default: "Active",
     },
+    // Incremented when access is revoked; old sessions stay invalid after reactivation.
+    sessionVersion: { type: Number, default: 0 },
     proficiency: {
         type: [mongoose.Schema.Types.ObjectId],
         ref: "Skill",

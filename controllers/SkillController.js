@@ -1,4 +1,16 @@
 const Skill = require("../src/models/Skill");
+const { recommendedSkillGroups } = require('../src/services/RecommendedSkills');
+
+// GET /api/skills/recommendations -> [{ category, skills: string[] }]. Read-only.
+const recommendations = async (req, res) => {
+  try {
+    const vocabulary = await Skill.find({}).select('name').lean();
+    res.status(200).json(recommendedSkillGroups(vocabulary));
+  } catch (error) {
+    console.error('Fetch recommended skills error:', error);
+    res.status(500).json({ message: 'Unable to load skill recommendations' });
+  }
+};
 
 const fetch = async (req, res) => {
   try {
@@ -52,4 +64,4 @@ const deleteSkill = async (req, res) => {
   }
 };
 
-module.exports = { fetch, create, deleteSkill };
+module.exports = { fetch, create, deleteSkill, recommendations };

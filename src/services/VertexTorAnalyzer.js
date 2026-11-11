@@ -1,7 +1,7 @@
 const { analysisError } = require("./AnalysisErrors");
 const { metadataSchema, validateMetadata } = require("./TorMetadata");
 const SYSTEM_INSTRUCTION = require("./TorExtractionPrompt");
-const PROMPT_VERSION = "tor-pdf-v4-reading-order";
+const PROMPT_VERSION = "tor-pdf-v5-shared-skills";
 
 function validateAnalysis(value, documentCount = 5) {
   if (!value || typeof value.hasTorContent !== "boolean" || typeof value.descriptions !== "string" ||

@@ -6,6 +6,12 @@ http.createServer((req, res) => {
     res.writeHead(501); return res.end(JSON.stringify({ error: 'Endpoint not modeled' }));
   }
   const body = req.body;
+  if (req.headers['x-test-skills'] === '1') {
+    const requestText = JSON.stringify(body);
+    if (!requestText.includes('Software Maintenance') || !requestText.includes('Database Backup and Recovery') || !requestText.includes('CATALOG FIRST')) {
+      res.writeHead(400); return res.end(JSON.stringify({error: {code: 400, message: 'Missing prepared vocabulary or catalog-first instructions'}}));
+    }
+  }
   if (!body?.contents?.[0]?.parts?.some(p => p.inlineData?.mimeType === 'application/pdf') || !body?.generationConfig?.responseSchema?.properties?.metadata || !body.systemInstruction) {
     res.writeHead(400); return res.end(JSON.stringify({ error: { code: 400, message: 'Missing PDF, system instruction or metadata schema', status: 'INVALID_ARGUMENT' } }));
   }
@@ -16,5 +22,10 @@ http.createServer((req, res) => {
   const value = { hasTorContent: true, descriptions: 'สรุป TOR สำหรับการทดสอบการเชื่อมต่อ', mandatorySkills: [], skillEvidence: [], noMandatorySkillsReason: 'ไม่มีทักษะที่ระบุชัดเจน', metadata: {
     budget: { status: 'found', reason: '', amountTHB: 2330000, evidence: { quote: 'งบประมาณ 2,330,000 บาท (สองล้านสามแสนสามหมื่นบาทถ้วน)', page: 6, documentIndex: 1 } }, announcedAt: date, deadline: date,
   } };
+  if (req.headers['x-test-skills'] === '1') {
+    value.mandatorySkills = ['Software Maintenance', 'Legacy System Diagnostics'];
+    value.skillEvidence = value.mandatorySkills.map(name => ({name, quote: `Required ${name}`, page: 1, documentIndex: 1}));
+    value.noMandatorySkillsReason = '';
+  }
   res.end(JSON.stringify({ candidates: [{ content: { role: 'model', parts: [{ text: JSON.stringify(value) }] }, finishReason: 'STOP' }] }));
 }).listen(process.env.PORT || 4500);

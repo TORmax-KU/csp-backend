@@ -27,6 +27,15 @@ Stop the simulation with Ctrl+C. The test cleans up its uniquely named local tes
 2026-10-26: the sole member `vertex` served successful generateContent requests and a 429. The SDK assertions and isolated local MongoDB worker persistence check passed; no member was silent.
 <!-- end:observations -->
 
+2026-11-11: reran the existing HTTP simulation for shared profile/TOR skill tags.
+The member recorded 200, 429 and 200 responses. The skill scenario requires the
+prepared vocabulary and catalog-first rule in the SDK request. Isolated local
+MongoDB assertions passed for reusing Software Maintenance's ID and creating an
+evidenced Legacy System Diagnostics tag. The synthetic missing publication and
+deadline correctly produce needs_review (the old completed assertion was stale).
+See vertex-extraction.context.yaml for the current scoped claims; this does not
+establish live model naming accuracy.
+
 ## What didn't work
 
 - CLI 1.75.0 requires the member path to name `config.yaml`, not its directory.

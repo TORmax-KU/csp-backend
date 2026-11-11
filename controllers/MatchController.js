@@ -17,7 +17,10 @@ const fetchForUser = async (req, res) => {
     }
 
     const user = req.user;
-    const matches = await Match.find({ userId: user._id }).select("projectId matchPercentage matchedSkillIds").lean();
+    // Hide stale results immediately while the asynchronous profile re-match completes.
+    const matches = user.role === "Vendor" && user.proficiency?.length
+      ? await Match.find({ userId: user._id }).select("projectId matchPercentage matchedSkillIds").lean()
+      : [];
     const byProject = new Map(matches.map(match => [String(match.projectId), match]));
 
     // Bounded by the number of open TORs, so sorting and paging in memory stays cheap.

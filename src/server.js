@@ -55,8 +55,11 @@ app.use("/api/matches", matchRoutes);
 
 mongoose
   .connect(MONGO_URI)
-  .then(() => {
+  .then(async () => {
     console.log("Connected to MongoDB");
+    const { seedRecommendedSkills } = require('./services/RecommendedSkills');
+    const { findOrCreateSkill } = require('./services/SkillCatalog');
+    await seedRecommendedSkills(findOrCreateSkill);
     startIngestionScheduler();
     startTorAnalysisWorker();
     startMatchingScheduler();

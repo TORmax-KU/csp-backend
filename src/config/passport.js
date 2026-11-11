@@ -3,12 +3,18 @@ const GoogleStrategy = require("passport-google-oauth20").Strategy;
 const User = require("../models/User");
 
 passport.serializeUser((user, done) => {
-  done(null, user.id);
+  done(null, { id: user.id, sessionVersion: user.sessionVersion ?? 0 });
 });
 
-passport.deserializeUser(async (id, done) => {
+passport.deserializeUser(async (identity, done) => {
   try {
+    // Sessions created before versioning contain just the user ID.
+    const id = typeof identity === "string" ? identity : identity.id;
+    const version = typeof identity === "string" ? 0 : identity.sessionVersion;
     const user = await User.findById(id);
+    if (!user || user.status === "Disabled" || (user.sessionVersion ?? 0) !== version) {
+      return done(null, false);
+    }
     done(null, user);
   } catch (error) {
     done(error);
@@ -44,6 +50,7 @@ if (process.env.GOOGLE_CLIENT_ID && process.env.GOOGLE_CLIENT_SECRET) passport.u
           });
         }
 
+        if (user.status === "Disabled") return done(null, false);
         done(null, user);
       } catch (error) {
         done(error);

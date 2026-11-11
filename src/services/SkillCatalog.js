@@ -35,6 +35,12 @@ const DEFAULT_SKILL_CATEGORIES = new Map([
   ["mongodb", "Database"],
   ["sql", "Database"],
 ]);
+for (const group of require('./RecommendedSkills').RECOMMENDED_SKILL_GROUPS) {
+  for (const name of group.skills) {
+    const key = name.toLocaleLowerCase('en-US');
+    if (!DEFAULT_SKILL_CATEGORIES.has(key)) DEFAULT_SKILL_CATEGORIES.set(key, group.category);
+  }
+}
 
 const normalizeSkillName = (name) =>
   name.trim().replace(/\s+/g, " ").normalize("NFKC");

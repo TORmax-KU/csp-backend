@@ -43,7 +43,7 @@ async function processNext({ projects = Project, skills = Skill, load = loadTor,
       }
     }
     const vocabulary = await skills.find({}).select("name").lean();
-    const analysis = await analyze(documents, vocabulary.map(s => s.name), { title: project.title, externalId: project.externalId });
+    const analysis = await analyze(documents, require('./RecommendedSkills').extractionVocabulary(vocabulary), { title: project.title, externalId: project.externalId });
     const mapped = await ensureRequiredSkills(analysis, vocabulary, skills);
     const values = analysis.metadata.values;
     const analyzedAt = new Date();

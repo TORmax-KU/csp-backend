@@ -103,6 +103,22 @@ test("an account without matches gets an empty list and profile hints, without a
   }
 });
 
+test("removing all skills hides stale matches before the background sweep", async (t) => {
+  t.mock.method(Match, "find", () => assert.fail("must not load stale matches"));
+  t.mock.method(Project, "find", () => assert.fail("must not load matched projects"));
+  const { server, base } = await startApp(() => ({ _id: VENDOR, role: "Vendor", proficiency: [] }));
+  try {
+    const response = await fetch(base);
+    assert.equal(response.status, 200);
+    const body = await response.json();
+    assert.deepEqual(body.projects, []);
+    assert.equal(body.total, 0);
+    assert.equal(body.profile.hasSkills, false);
+  } finally {
+    await new Promise(resolve => server.close(resolve));
+  }
+});
+
 test("TOR match breakdown names matched and missing skills and agrees with the engine's rule", async (t) => {
   const Skill = require("../src/models/Skill");
   const { matchSkills } = require("../controllers/TorAnalysisController");

@@ -15,7 +15,9 @@ authClient.setCredentials({ access_token: "local-simulation-only", expiry_date: 
 const clientOptions = { googleAuthOptions: { authClient },
   httpOptions: { baseUrl, apiVersion: "v1beta1", timeout: 10000, headers: { Authorization: "Bearer local-simulation-only" }, retryOptions: { attempts: 1 } } };
 async function main() {
-  const result = await analyzeTor(documents, [], {}, { clientOptions });
+  const { extractionVocabulary } = require('../src/services/RecommendedSkills');
+  const vocabulary = extractionVocabulary([]);
+  const result = await analyzeTor(documents, vocabulary, {}, { clientOptions });
   assert.equal(result.metadata.values.budget, 2330000);
   assert.equal(result.metadata.values.deadline, null);
   assert.equal(result.metadata.fields.deadline.status, "not_found");
@@ -27,18 +29,27 @@ async function main() {
   try {
     const { ProjectSchema } = require("../schemas/ProjectModel");
     const projects = connection.model("VertexTestProject", ProjectSchema);
-    const skills = connection.model("VertexTestSkill", new mongoose.Schema({ name: String }));
+    const skills = connection.model("VertexTestSkill", require('../schemas/SkillModel').SkillSchema);
+    const existingSkill = await skills.create({name: 'Software Maintenance', category: 'Technical'});
+    const skillOptions = { ...clientOptions, httpOptions: { ...clientOptions.httpOptions,
+      headers: { ...clientOptions.httpOptions.headers, 'x-test-skills': '1' } } };
     const project = await projects.create({ title: "Isolated Vertex integration fixture", sourceUrl: "https://egp2.bangkok.go.th/test.pdf", analysisHold: false });
     const { processNext } = require("../src/services/TorAnalysisWorker");
-    await processNext({ projects, skills, load: async () => documents, analyze: (docs, names, context) => analyzeTor(docs, names, context, { clientOptions }) });
+    await processNext({ projects, skills, onCompleted: () => {}, load: async () => documents, analyze: (docs, names, context) => analyzeTor(docs, names, context, { clientOptions: skillOptions }) });
     const saved = await projects.findById(project._id).lean();
-    assert.equal(saved.analysisStatus, "completed");
+    assert.equal(saved.analysisStatus, "needs_review");
     assert.equal(saved.budget, 2330000);
     assert.equal(saved.deadline, null);
     assert.equal(saved.aiAnalysis.fieldResults.budget.evidence.page, 6);
     assert.equal(saved.aiAnalysis.fieldResults.deadline.status, "not_found");
     assert.equal(saved.procurementStatus, "unknown");
     assert.ok(saved.descriptions);
+    assert.ok(saved.requiredSkills.some(id => String(id) === String(existingSkill._id)));
+    const newSkill = await skills.findOne({normalizedName: 'legacy system diagnostics'});
+    assert.ok(newSkill);
+    assert.ok(saved.requiredSkills.some(id => String(id) === String(newSkill._id)));
+    assert.equal(await skills.countDocuments({normalizedName: 'software maintenance'}), 1);
+    assert.deepEqual(saved.aiAnalysis.unmappedSkillNames, []);
     console.log("Worker persistence passed against isolated local MongoDB; Atlas was not used.");
   } finally { await connection.dropDatabase(); await connection.close(); }
   console.log("Vertex SDK HTTP simulation passed: request schema, PDF upload, result parsing and 429 classification.");

@@ -28,12 +28,8 @@ const moderatePost = async (req, res) => {
     await Project.findByIdAndDelete(id, { session });
 
     if (publisherId) {
-      await User.findByIdAndUpdate(publisherId, { status: "Disabled" }, { session });
-
-      // invalidate all sessions for the publisher via the session store collection
-      await mongoose.connection.db
-        .collection("sessions")
-        .deleteMany({ "session.passport.user": publisherId.toString() });
+      await User.findByIdAndUpdate(publisherId,
+        { $set: { status: "Disabled" }, $inc: { sessionVersion: 1 } }, { session });
     }
 
     await ModerationLog.create(
@@ -140,14 +136,10 @@ const setUserStatus = async (req, res) => {
       return res.status(400).json({ message: "Invalid status value" });
     }
 
-    const user = await User.findByIdAndUpdate(id, { status }, { new: true, runValidators: true });
+    const patch = { $set: { status } };
+    if (status === "Disabled") patch.$inc = { sessionVersion: 1 };
+    const user = await User.findByIdAndUpdate(id, patch, { new: true, runValidators: true });
     if (!user) return res.status(404).json({ message: "User not found" });
-
-    if (status === "Disabled") {
-      await mongoose.connection.db
-        .collection("sessions")
-        .deleteMany({ "session.passport.user": id });
-    }
 
     res.status(200).json({ message: `Account ${status.toLowerCase()}`, user });
   } catch (error) {

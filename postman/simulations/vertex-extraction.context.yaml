@@ -1,0 +1,23 @@
+purpose:
+  stands_in_for: Google Vertex generateContent, using the existing synthetic HTTP handler.
+  unblocks: Checking SDK request wiring and isolated worker skill persistence without paid model calls.
+assumptions:
+  - id: shared-skill-vocabulary-transport
+    status: supported
+    claim: The local analyzer and worker transmit prepared skill names and catalog-first instructions and persist returned tags using shared IDs in the simulated scenario.
+    reason: The stand-in rejects the skill scenario unless the request contains the prepared tags and catalog-first rule; the worker assertions confirm existing ID reuse and evidenced new-tag creation.
+    verification: On 2026-11-11 the SDK simulation passed. Member request events recorded two successful responses and one 429. The worker used a uniquely named local MongoDB database and dropped it afterward. Shared Atlas projects were not used for this test. A fixture lacking publication and deadline correctly persisted needs_review.
+    source: scripts/test-vertex-simulation.js; postman/mocks/vertex-extraction/handler.js; postman/simulations/vertex-extraction.context.md
+    updated_at: '2026-11-11'
+  - id: live-semantic-tag-selection
+    status: unknown
+    claim: Live Vertex reliably selects the exact existing tag for every equivalent TOR competency.
+    reason: The synthetic response tests transport and persistence, not the model's interpretation of documents or naming accuracy.
+    verification: No new paid live extraction was initiated for this change. Model compliance requires inspection of future live results.
+    source: src/services/TorExtractionPrompt.js; src/services/RecommendedSkills.js
+    updated_at: '2026-11-11'
+fingerprints:
+  - id: shared-skills-check
+    date: '2026-11-11'
+    commit: null
+    cli: null

@@ -52,7 +52,7 @@ async function runMatching({ userIds, now = new Date(), models = defaultModels }
   const { projects, users, skills, matches, notifications } = models;
   const counts = { newMatches: 0, removed: 0, statusChanges: 0 };
 
-  const vendorFilter = { role: "Vendor", status: "Active", "proficiency.0": { $exists: true } };
+  const vendorFilter = { role: "Vendor", status: "Active" };
   if (userIds) vendorFilter._id = { $in: userIds };
   const [vendors, candidates, catalog] = await Promise.all([
     users.find(vendorFilter).select("proficiency minBudget maxBudget matchThreshold").lean(),
@@ -69,6 +69,15 @@ async function runMatching({ userIds, now = new Date(), models = defaultModels }
   // FR-08 / FR-10: create, refresh or drop matches for currently open TORs.
   // Matches on TORs that have left the open feed are kept so their state changes can be reported.
   for (const user of vendors) {
+    // Clear all stored matches, including closed TORs, after the last skill is removed.
+    if (!user.proficiency?.length) {
+      for (const match of existing.values()) {
+        if (String(match.userId) !== String(user._id)) continue;
+        await matches.deleteOne({ _id: match._id });
+        counts.removed += 1;
+      }
+      continue;
+    }
     for (const project of candidates) {
       const key = `${user._id}:${project._id}`;
       const previous = existing.get(key);
