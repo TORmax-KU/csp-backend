@@ -17,14 +17,15 @@ account with access to this Google Cloud project's Vertex API and billing.
 
 ```powershell
 $env:GOOGLE_ADC_HOST_PATH = "$env:APPDATA\gcloud\application_default_credentials.json"
-docker compose -f docker-compose.yaml -f docker-compose.vertex.yaml up -d --build --renew-anon-volumes
-docker compose -f docker-compose.yaml -f docker-compose.vertex.yaml logs -f backend
+docker compose up -d --build --renew-anon-volumes
+docker compose logs -f backend
 ```
 
-The override mounts the host credential file read-only and sets the container's
-`GOOGLE_APPLICATION_CREDENTIALS`. Plain root `docker compose up` does not mount
-ADC. Set `GOOGLE_ADC_HOST_PATH` again in each new PowerShell session, or store its
-path (not credential contents) in a root `.env` used by Compose. The first upgrade
+The root `docker-compose.yaml` (the only Compose file) mounts the host credential
+file read-only and sets the container's `GOOGLE_APPLICATION_CREDENTIALS` whenever
+`GOOGLE_ADC_HOST_PATH` is set; without it, no ADC is mounted. Set it again in each
+new PowerShell session, or store its path (not credential contents) in a root `.env`
+used by Compose (ignored by Git). The first upgrade
 uses `--renew-anon-volumes` because old dependency volumes may lack `pdf-parse`.
 It does not replace the named MongoDB data volume. Later starts can omit this flag.
 
@@ -78,7 +79,7 @@ plus summary/skills with citations. The read-only smoke command saves its report
 under ignored `tmp/vertex-extraction-check.json` and never writes to MongoDB:
 
 ```powershell
-docker compose -f docker-compose.yaml -f docker-compose.vertex.yaml run --rm --no-deps backend node scripts/check-vertex-extraction.js --source https://egp2.bangkok.go.th/project-detail/0d1e0f7d-eabc-4840-b632-043635d17454
+docker compose run --rm --no-deps backend node scripts/check-vertex-extraction.js --source https://egp2.bangkok.go.th/project-detail/0d1e0f7d-eabc-4840-b632-043635d17454
 ```
 
 See `postman/simulations/vertex-extraction.context.md` for the SDK HTTP simulation

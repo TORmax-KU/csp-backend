@@ -1,6 +1,7 @@
 const { ingestRecords } = require('./IngestionPipeline');
 const { loadTor } = require('./TorSource');
 const Project = require('../models/Project');
+const IngestionLog = require('../models/IngestionLog');
 const { createHash } = require('node:crypto');
 const hash = bytes => createHash('sha256').update(bytes).digest('hex');
 // Renew only after re-reading the underlying PDFs. A changed archive needs fresh AI.
@@ -24,7 +25,17 @@ async function refreshDocuments(source) {
   }
 }
 async function run(client, opts) {
-  const data = await client.fetchListings({ onProgress: page => console.log(`${page.source} scan: fiscal year ${page.year}, offset ${page.offset}, ${page.count} rows`), ...opts });
+  const startedAt = new Date();
+  let data;
+  try {
+    data = await client.fetchListings({ onProgress: page => console.log(`${page.source} scan: fiscal year ${page.year}, offset ${page.offset}, ${page.count} rows`), ...opts });
+  } catch (error) {
+    // Recorded like the other sources so failures count against the success rate (NFR-08).
+    await IngestionLog.create({ source: client.SOURCE, sourceUrl: client.ENDPOINT || client.ORIGIN || '', status: 'Failed',
+      errorMessage: `${error.code || 'SOURCE_UNAVAILABLE'}: ${error.message}`, startedAt, finishedAt: new Date(),
+      durationMs: Date.now() - startedAt.getTime() }).catch(e => console.error(`Cannot save ${client.SOURCE} ingestion log:`, e.message));
+    throw error;
+  }
   const log = await ingestRecords(data);
   await refreshDocuments(data.source);
   console.log(`${data.source}: ${log.projectsCreated} created, ${log.projectsUpdated} updated, ${log.projectsFiltered} filtered`);

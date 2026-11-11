@@ -36,7 +36,9 @@ function calculateMatch(project, userSkills) {
   const owned = new Set((userSkills || []).map(s => (s._id || s).toString()));
   const matchedSkillIds = required.filter(id => owned.has(id));
   const missingSkillIds = required.filter(id => !owned.has(id));
-  const ready = project.analysisStatus === "completed" && !project.aiAnalysis?.unmappedSkillNames?.length && required.length > 0;
+  // Direct postings declare their required skills, so they are scorable without AI analysis.
+  const analyzed = project.analysisStatus === "completed" || project.source === "direct";
+  const ready = analyzed && !project.aiAnalysis?.unmappedSkillNames?.length && required.length > 0;
   return { matchPercentage: ready ? Math.round(matchedSkillIds.length / required.length * 10000) / 100 : null,
     matchedSkillIds, missingSkillIds, requiredCount: required.length,
     reason: ready ? null : "Analysis incomplete, unmapped skills, or no mandatory skills" };

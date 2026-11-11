@@ -3,7 +3,7 @@ const User = require("../models/User");
 const Skill = require("../models/Skill");
 const Match = require("../models/Match");
 const Notification = require("../models/Notification");
-const { publicProjectQuery } = require("./ProcurementAvailability");
+const { listedProjectQuery, DIRECT_SOURCE } = require("./ProcurementAvailability");
 const { resolveSkills, calculateMatch } = require("./SkillMatching");
 
 const DEFAULT_THRESHOLD = 75;
@@ -13,8 +13,10 @@ const REQUEST_DEBOUNCE_MS = 30 * 1000;
 const defaultModels = { projects: Project, users: User, skills: Skill, matches: Match, notifications: Notification };
 
 // State a vendor is told about. "unknown" is transient while a TOR is re-verified, so it is never reported.
-function trackedState(project) {
+function trackedState(project, now = new Date()) {
   if (project.status === "Draft") return "draft";
+  // A direct posting closes at its deadline; no scraper will mark it closed.
+  if (project.source === DIRECT_SOURCE && project.procurementStatus === "open" && project.deadline && new Date(project.deadline) <= now) return "closed";
   return project.procurementStatus === "unknown" ? null : project.procurementStatus;
 }
 
@@ -54,8 +56,8 @@ async function runMatching({ userIds, now = new Date(), models = defaultModels }
   if (userIds) vendorFilter._id = { $in: userIds };
   const [vendors, candidates, catalog] = await Promise.all([
     users.find(vendorFilter).select("proficiency minBudget maxBudget matchThreshold").lean(),
-    projects.find(publicProjectQuery(now))
-      .select("status procurementStatus budget requiredSkills analysisStatus aiAnalysis.mandatorySkillNames aiAnalysis.unmappedSkillNames")
+    projects.find(listedProjectQuery(now))
+      .select("source status procurementStatus deadline budget requiredSkills analysisStatus aiAnalysis.mandatorySkillNames aiAnalysis.unmappedSkillNames")
       .lean(),
     skills.find({}).select("name").lean(),
   ]);
@@ -84,7 +86,7 @@ async function runMatching({ userIds, now = new Date(), models = defaultModels }
       const write = await matches.updateOne(
         { userId: user._id, projectId: project._id },
         { $set: { matchPercentage: result.matchPercentage, matchedSkillIds: result.matchedSkillIds },
-          $setOnInsert: { notifiedState: trackedState(project) } },
+          $setOnInsert: { notifiedState: trackedState(project, now) } },
         { upsert: true }
       ).catch(ignoreDuplicate);
 
@@ -100,7 +102,7 @@ async function runMatching({ userIds, now = new Date(), models = defaultModels }
   const tracked = await matches.find(userIds ? { userId: { $in: userIds } } : {})
     .select("userId projectId notifiedState").lean();
   const current = new Map((await projects.find({ _id: { $in: [...new Set(tracked.map(m => String(m.projectId)))] } })
-    .select("status procurementStatus").lean())
+    .select("source status procurementStatus deadline").lean())
     .map(p => [String(p._id), p]));
 
   for (const match of tracked) {
@@ -110,7 +112,7 @@ async function runMatching({ userIds, now = new Date(), models = defaultModels }
       counts.removed += 1;
       continue;
     }
-    const state = trackedState(project);
+    const state = trackedState(project, now);
     if (!state || state === match.notifiedState) continue;
 
     const claim = await matches.updateOne({ _id: match._id, notifiedState: match.notifiedState }, { $set: { notifiedState: state } });

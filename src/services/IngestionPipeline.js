@@ -131,6 +131,7 @@ const ingestRecords = async ({
     status: counters.projectsFailed === (records || []).length && records?.length
       ? "Failed"
       : "Success",
+    recordsFetched: (records || []).length,
     torsIngested: counters.projectsCreated + counters.projectsUpdated,
     ...counters,
     budgetYear,

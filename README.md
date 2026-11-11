@@ -34,8 +34,10 @@ automatically after MongoDB connects and repeats every five minutes, in either
 local Node or Docker. It runs only while the backend is running. Concurrent ticks
 in a single backend process are skipped; use one ingestion-enabled backend per DB.
 
-For the root Docker stack, run `docker compose up -d --build`. Compose overrides
-the Mongo host to `mongo` and maps backend port 5000 to host port 5001.
+For the full Docker stack, run `docker compose up -d --build` from the main
+repository root. Its `docker-compose.yaml` is the project's only Compose file: it
+loads `csp-backend/.env`, overrides the Mongo host to `mongo`, and maps backend
+port 5000 to host port 5001.
 
 ## Active source imports
 
@@ -51,6 +53,29 @@ The public feed currently accepts only verified Bangkok software/IT e-bidding
 projects with complete analysis and future deadlines. Importing a listing does
 not by itself establish its deadline or verify its TOR. New source candidates
 must pass document and eligibility checks before publication.
+
+### Scraper health and alerts
+
+- **Timeouts (NFR-04):** a portal that does not start responding within 30 seconds is
+  abandoned, logged as a `SOURCE_TIMEOUT` failure, and retried on the next five-minute run.
+- **Alerts (Open Issue 1):** when a source fails three runs in a row, or returns 0
+  listings three runs in a row although it had listings in the past week (usually
+  changed page markup), the backend logs an `[ingestion alert]` and posts to
+  `INGESTION_ALERT_WEBHOOK_URL` (a Slack or Discord incoming webhook) if set. A recovery
+  notice follows when the source works again.
+- **Success rate (NFR-08, target 95%):** `node scripts/report-ingestion-health.js [days]`
+  prints per-source runs, failures, empty runs and success rate (Docker:
+  `docker compose exec -T backend node scripts/report-ingestion-health.js`). Admins can
+  read the same data from `GET /api/admin/ingestion-health?days=7`.
+
+### Misclassification reports (Open Issue 2)
+
+Signed-in users can flag a government TOR from its detail page
+(`POST /api/projects/:id/classification-report`; one report per user per TOR). Admins
+review them with `GET /api/admin/classification-reports?status=open` and
+`PATCH /api/admin/classification-reports/:id` (`status`: `resolved` or `dismissed`;
+add `markNonSoftware: true` to remove the TOR from the IT feed). The admin console UI
+for both is not built yet.
 
 ## Public data rules
 
@@ -157,12 +182,12 @@ Requires Node.js 22+ (the Docker image already uses Node 22).
    Pick a Gemini model supporting PDF input and structured output in your project.
    Vertex API calls incur usage charges. Leave `VERTEX_AI_ENABLED=false` until ready.
 
-3. For the root Docker Compose stack, mount local ADC read-only using the supplied
-   override, from the workspace root:
+3. For the root Docker Compose stack, set `GOOGLE_ADC_HOST_PATH` and the root
+   `docker-compose.yaml` mounts local ADC read-only. From the main repository root:
 
    ```powershell
    $env:GOOGLE_ADC_HOST_PATH = "$env:APPDATA\gcloud\application_default_credentials.json"
-   docker compose -f docker-compose.yaml -f docker-compose.vertex.yaml up -d --build --renew-anon-volumes backend
+   docker compose up -d --build --renew-anon-volumes backend
    ```
 
    For local Node execution, `npm install` and `npm run dev` use your local ADC.

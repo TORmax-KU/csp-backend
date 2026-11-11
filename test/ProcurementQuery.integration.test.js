@@ -5,7 +5,7 @@ const { randomUUID } = require('node:crypto');
 const { ProjectSchema } = require('../schemas/ProjectModel');
 const { buildProjectQuery } = require('../src/services/ProjectSearch');
 
-test('MongoDB returns only open TORs with all AI fields', { skip: !process.env.TEST_MONGO_URI }, async () => {
+test('MongoDB returns only open TORs with all AI fields, plus open direct postings', { skip: !process.env.TEST_MONGO_URI }, async () => {
   const connection = await mongoose.createConnection(process.env.TEST_MONGO_URI).asPromise();
   const collection = `procurement_test_${randomUUID().replaceAll('-', '')}`;
   const Project = connection.model('ProcurementQueryTest', ProjectSchema, collection);
@@ -30,14 +30,23 @@ test('MongoDB returns only open TORs with all AI fields', { skip: !process.env.T
   ];
   try {
     await Project.insertMany(cases.map(([title, patch], index) => ({ ...base, ...patch, title, externalId: String(index) })));
+    // Direct postings (FR-13) have no TOR documents or AI fields; only the publisher's deadline and status gate them.
+    const posting = { source: 'direct', procurementMethod: 'Direct posting', status: 'Public', classification: 'software', procurementStatus: 'open',
+      publisherId: new mongoose.Types.ObjectId(), budget: 5000, deadlinePrecision: 'datetime', deadline: new Date('2026-10-06T12:00:00+07:00'), analysisStatus: 'skipped' };
+    await Project.insertMany([['direct-open', {}], ['direct-expired', { deadline: now }], ['direct-closed', { procurementStatus: 'closed' }],
+      ['direct-no-budget', { budget: null }]].map(([title, patch]) => ({ ...posting, ...patch, title, externalId: `TMX-${title}` })));
     for (const params of [{}, { deadlineYear: '2569' }, { deadlineFrom: '2026-10-01', deadlineTo: '2026-10-31' }]) {
       const { query } = await buildProjectQuery(params, async () => [], now);
-      assert.deepEqual((await Project.find(query).lean()).map(p => p.title).sort(), ['gov-open', 'open', 'tero-open']);
+      assert.deepEqual((await Project.find(query).lean()).map(p => p.title).sort(), ['direct-open', 'gov-open', 'open', 'tero-open']);
     }
+    const direct = await buildProjectQuery({ origin: 'direct' }, async () => [], now);
+    assert.deepEqual((await Project.find(direct.query).lean()).map(p => p.title), ['direct-open']);
+    const government = await buildProjectQuery({ origin: 'government', method: 'e-bidding' }, async () => [], now);
+    assert.deepEqual((await Project.find(government.query).lean()).map(p => p.title).sort(), ['gov-open', 'open', 'tero-open']);
     const searched = await buildProjectQuery({ availability: 'open', search: 'unknown' }, async () => [], now);
     assert.deepEqual((await Project.find(searched.query).lean()).map(p => p.title), []);
     const dated = await buildProjectQuery({ availability: 'open', deadlineYear: '2569' }, async () => [], now);
-    assert.deepEqual((await Project.find(dated.query).lean()).map(p => p.title).sort(), ['gov-open', 'open', 'tero-open']);
+    assert.deepEqual((await Project.find(dated.query).lean()).map(p => p.title).sort(), ['direct-open', 'gov-open', 'open', 'tero-open']);
     const oldYear = await buildProjectQuery({ deadlineYear: '2568' }, async () => [], now);
     assert.equal(await Project.countDocuments(oldYear.query), 0);
     await Project.insertMany([

@@ -1,6 +1,6 @@
 const Match = require("../src/models/Match");
 const Project = require("../src/models/Project");
-const { availability, publicProjectQuery } = require("../src/services/ProcurementAvailability");
+const { availability, listedProjectQuery } = require("../src/services/ProcurementAvailability");
 const { DEFAULT_THRESHOLD } = require("../src/services/MatchingEngine");
 
 const MAX_LIMIT = 100;
@@ -21,7 +21,7 @@ const fetchForUser = async (req, res) => {
     const byProject = new Map(matches.map(match => [String(match.projectId), match]));
 
     // Bounded by the number of open TORs, so sorting and paging in memory stays cheap.
-    const projects = byProject.size ? await Project.find({ ...publicProjectQuery(new Date()), _id: { $in: [...byProject.keys()] } })
+    const projects = byProject.size ? await Project.find({ ...listedProjectQuery(new Date()), _id: { $in: [...byProject.keys()] } })
       .select("-rawData -analysisError -analysisLease")
       .populate("requiredSkills", "name category")
       .populate("publisherId", "username")

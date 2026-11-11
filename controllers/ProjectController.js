@@ -1,9 +1,28 @@
 const Project = require("../src/models/Project");
 const Skill = require("../src/models/Skill");
 const { buildProjectQuery } = require("../src/services/ProjectSearch");
-const { availability } = require("../src/services/ProcurementAvailability");
+const { availability, DIRECT_SOURCE } = require("../src/services/ProcurementAvailability");
 const { ingestionStatus } = require("../src/services/IngestionScheduler");
 const { pendingTorExtraction } = require("../src/services/PendingTorExtraction");
+const mongoose = require("mongoose");
+const { validatePosting, directPostingDefaults } = require("../src/services/DirectPosting");
+const { findOrCreateSkill } = require("../src/services/SkillCatalog");
+const { assessProject } = require("../src/services/PriceAnalysis");
+const { requestMatching } = require("../src/services/MatchingEngine");
+
+const PUBLISHER_FIELDS = "username realName companyName";
+
+// Direct postings are flagged against government benchmarks but never feed them, so only the
+// saved posting needs assessing. Matching runs right away so vendors are notified (UC4).
+async function afterPostingSaved(project) {
+  const verdict = await assessProject(project);
+  const saved = await Project.findByIdAndUpdate(project._id, { $set: verdict }, { new: true })
+    .populate("requiredSkills", "name category").populate("publisherId", PUBLISHER_FIELDS);
+  requestMatching(1000);
+  return saved;
+}
+
+const validationFailed = (res, errors) => res.status(400).json({ message: "Please fix the highlighted fields", errors });
 
 const fetch = async (req, res) => {
   try {
@@ -13,7 +32,7 @@ const fetch = async (req, res) => {
     const [projects, total] = await Promise.all([
       Project.find(query)
         .populate("requiredSkills", "name category")
-        .populate("publisherId", "username")
+        .populate("publisherId", PUBLISHER_FIELDS)
         .select("-rawData -analysisError -analysisLease")
         .sort(req.query.sort === "newest" ? { announcedAt: -1, _id: -1 } : req.query.sort === "budget" ? { budget: -1, _id: -1 } : { deadline: 1, _id: 1 })
         .skip((page - 1) * Number(limit))
@@ -36,7 +55,7 @@ const fetchById = async (req, res) => {
     const project = await Project.findById(req.params.id)
       .select("-rawData -analysisError -analysisLease")
       .populate("requiredSkills", "name category")
-      .populate("publisherId", "username");
+      .populate("publisherId", PUBLISHER_FIELDS);
 
     if (!project || project.status !== "Public") return res.status(404).json({ message: "Project not found" });
 
@@ -48,9 +67,28 @@ const fetchById = async (req, res) => {
   }
 };
 
+// FR-13 / US6: a Job Lister's own postings, newest first, including closed ones.
+const fetchMine = async (req, res) => {
+  try {
+    const projects = await Project.find({ source: DIRECT_SOURCE, publisherId: req.user._id })
+      .select("-rawData -analysisError -analysisLease")
+      .populate("requiredSkills", "name category")
+      .sort({ createdAt: -1, _id: -1 })
+      .limit(200);
+    res.set("Cache-Control", "no-store");
+    res.status(200).json({ projects: projects.map(p => ({ ...p.toObject(), availability: availability(p) })) });
+  } catch (error) {
+    console.error("Fetch own postings error:", error);
+    res.status(500).json({ error: "Server error while fetching your postings" });
+  }
+};
+
+// Job Listers publish direct postings (FR-13, UC4). Admins instead register a government TOR
+// by URL, which is queued for AI extraction rather than trusting submitted metadata.
 const create = async (req, res) => {
   try {
-    if (!["JobLister", "Admin"].includes(req.user.role)) {
+    if (req.user.role === "JobLister") return await createPosting(req, res);
+    if (req.user.role !== "Admin") {
       return res.status(403).json({ message: "Only Job Listers can create postings" });
     }
 
@@ -76,6 +114,26 @@ const create = async (req, res) => {
   }
 };
 
+async function createPosting(req, res) {
+  const now = new Date();
+  const { value, skillNames, errors } = validatePosting(req.body, { now });
+  if (Object.keys(errors).length) return validationFailed(res, errors);
+
+  const skills = await Promise.all(skillNames.map(findOrCreateSkill));
+  const _id = new mongoose.Types.ObjectId();
+  const project = await Project.create({
+    _id,
+    ...value,
+    // Unique per posting: (source, externalId) has a unique index.
+    externalId: `TMX-${String(_id).slice(-10).toUpperCase()}`,
+    requiredSkills: skills.map(skill => skill._id),
+    sourceSkillNames: skills.map(skill => skill.name),
+    ...directPostingDefaults({ publisherId: req.user._id, now }),
+  });
+  const saved = await afterPostingSaved(project.toObject());
+  res.status(201).json({ ...saved.toObject(), availability: availability(saved) });
+}
+
 const update = async (req, res) => {
   try {
     const project = await Project.findById(req.params.id);
@@ -85,6 +143,8 @@ const update = async (req, res) => {
     if (!isOwner && req.user.role !== "Admin") {
       return res.status(403).json({ message: "Forbidden" });
     }
+
+    if (project.source === DIRECT_SOURCE) return await updatePosting(req, res, project);
 
     const EDITABLE_FIELDS = ["title", "agency", "description", "category", "status", "sourceUrl"];
     const patch = {};
@@ -115,6 +175,21 @@ const update = async (req, res) => {
   }
 };
 
+async function updatePosting(req, res, project) {
+  const { value, skillNames, errors } = validatePosting(req.body, { existing: project.toObject() });
+  if (Object.keys(errors).length) return validationFailed(res, errors);
+
+  const patch = { ...value };
+  if (skillNames) {
+    const skills = await Promise.all(skillNames.map(findOrCreateSkill));
+    patch.requiredSkills = skills.map(skill => skill._id);
+    patch.sourceSkillNames = skills.map(skill => skill.name);
+  }
+  const updated = await Project.findByIdAndUpdate(project._id, { $set: patch }, { new: true, runValidators: true });
+  const saved = await afterPostingSaved(updated.toObject());
+  res.status(200).json({ ...saved.toObject(), availability: availability(saved) });
+}
+
 const deleteProject = async (req, res) => {
   try {
     const project = await Project.findById(req.params.id);
@@ -133,4 +208,4 @@ const deleteProject = async (req, res) => {
   }
 };
 
-module.exports = { fetch, fetchById, create, update, deleteProject };
+module.exports = { fetch, fetchById, fetchMine, create, update, deleteProject };

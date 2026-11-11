@@ -2,8 +2,17 @@ const MAX_AGE_MS = 24 * 60 * 60 * 1000;
 const TERMINAL = ["closed", "awarded", "cancelled", "draft"];
 const bangkokDayStart = now => new Date(Math.floor((now.getTime() + 7 * 3600000) / 86400000) * 86400000 - 7 * 3600000);
 
+const DIRECT_SOURCE = "direct";
+
 function availability(project, now = new Date()) {
   if (TERMINAL.includes(project.procurementStatus)) return project.procurementStatus;
+  // Direct postings have no official source to verify; the publisher's deadline decides.
+  if (project.source === DIRECT_SOURCE) {
+    const deadline = new Date(project.deadline).getTime();
+    if (!project.deadline || !Number.isFinite(deadline)) return "unknown";
+    if (deadline <= now.getTime()) return "closed";
+    return project.procurementStatus === "open" ? "open" : "unknown";
+  }
   if (project.deadline && Number.isNaN(new Date(project.deadline).getTime())) return "unverified";
   if (project.deadline && (project.deadlinePrecision === "datetime"
     ? new Date(project.deadline) <= now
@@ -46,4 +55,19 @@ function publicProjectQuery(now = new Date()) {
   return { ...base, procurementStatus: "open", $and: [open] };
 }
 
-module.exports = { availability, publicProjectQuery, MAX_AGE_MS, ALLOWED_SOURCES };
+// FR-13: open job postings published directly on TORmax by Job Listers.
+function directPostingQuery(now = new Date()) {
+  return {
+    source: DIRECT_SOURCE, status: "Public", classification: "software", procurementStatus: "open",
+    publisherId: { $ne: null }, title: { $regex: "\\S" },
+    budget: { $type: "number", $gt: 0 }, deadline: { $gt: now },
+  };
+}
+
+// Everything vendors can see: verified open government TORs plus open direct postings.
+// governmentFilter narrows only the government branch (e.g. the e-bidding method).
+function listedProjectQuery(now = new Date(), { governmentFilter = {} } = {}) {
+  return { $or: [{ ...publicProjectQuery(now), ...governmentFilter }, directPostingQuery(now)] };
+}
+
+module.exports = { availability, publicProjectQuery, directPostingQuery, listedProjectQuery, MAX_AGE_MS, ALLOWED_SOURCES, DIRECT_SOURCE };

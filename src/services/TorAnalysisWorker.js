@@ -7,8 +7,12 @@ const { ensureRequiredSkills } = require("./SkillMatching");
 const { classifyAnalysisError } = require("./AnalysisErrors");
 const { analysisSkipReason } = require("./AnalysisQueuePolicy");
 const { requestMatching } = require("./MatchingEngine");
+const { requestPriceAnalysis } = require("./PriceAnalysis");
 
-async function processNext({ projects = Project, skills = Skill, load = loadTor, analyze = analyzeTor, projectId, onCompleted = requestMatching } = {}) {
+// A completed TOR is newly scorable and adds a confirmed budget to its category benchmark.
+const refreshAfterAnalysis = () => { requestMatching(); requestPriceAnalysis(); };
+
+async function processNext({ projects = Project, skills = Skill, load = loadTor, analyze = analyzeTor, projectId, onCompleted = refreshAfterAnalysis } = {}) {
   const lease = randomUUID();
   const claim = { ...(projectId ? { _id: projectId } : {}), analysisAutoEligible: { $ne: false }, analysisHold: { $ne: true }, sourceUrl: { $type: "string", $ne: "" }, $or: [
     { analysisStatus: "pending" },
@@ -69,7 +73,7 @@ async function processNext({ projects = Project, skills = Skill, load = loadTor,
       procurementStatus: { $nin: ["awarded", "cancelled", "draft"] } }, { $set: {
       procurementStatus: values.deadline ? "open" : "unknown",
     } });
-    // A completed TOR is newly scorable, so match it now instead of waiting for the next sweep.
+    // Match and price it now instead of waiting for the next sweeps.
     if (status === "completed") onCompleted();
     console.log(`TOR analysis ${status}: ${project._id}; budget=${analysis.metadata.fields.budget.status}, publication=${analysis.metadata.fields.announcedAt.status}, deadline=${analysis.metadata.fields.deadline.status}`);
   } catch (error) {
@@ -95,7 +99,7 @@ async function prepareWorker({ projects = Project, authenticate } = {}) {
     const auth = new GoogleAuth({ scopes: ["https://www.googleapis.com/auth/cloud-platform"] });
     await auth.getAccessToken();
   };
-  try { await authenticate(); } catch { throw Object.assign(new Error("Google ADC is unavailable. Mount the credential file with docker-compose.vertex.yaml, then restart."), { pauseWorker: true }); }
+  try { await authenticate(); } catch { throw Object.assign(new Error("Google ADC is unavailable. Set GOOGLE_ADC_HOST_PATH before `docker compose up` (or run gcloud auth application-default login locally), then restart."), { pauseWorker: true }); }
   return projects.updateMany({ analysisAutoEligible: { $ne: false }, analysisHold: true, analysisStatus: "pending" }, { $set: { analysisHold: false } });
 }
 

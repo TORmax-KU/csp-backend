@@ -6,6 +6,7 @@ const IngestionLog = require("../src/models/IngestionLog");
 const Notification = require("../src/models/Notification");
 const Match = require("../src/models/Match");
 const { runBangkokOnce, ingestionStatus } = require("../src/services/IngestionScheduler");
+const { ingestionHealth } = require("../src/services/IngestionHealth");
 
 // FR-14 / Use Case 5: remove a violating post and auto-disable the publisher
 const moderatePost = async (req, res) => {
@@ -102,6 +103,26 @@ const fetchIngestionLogs = async (req, res) => {
   }
 };
 
+// NFR-08 / Use Case 6: success rate per source against the 95% target, plus live scheduler state.
+const fetchIngestionHealth = async (req, res) => {
+  try {
+    const days = Number(req.query.days ?? 7);
+    if (!Number.isInteger(days) || days < 1 || days > 90) return res.status(400).json({ error: "days must be an integer from 1 to 90" });
+    const health = await ingestionHealth({ days });
+    const live = new Map(ingestionStatus().sources.map(state => [state.source, state]));
+    // Include enabled sources that have not logged a run in the window yet.
+    for (const source of live.keys()) {
+      if (!health.sources.some(s => s.source === source)) health.sources.push({ source, runs: 0, succeeded: 0, failed: 0, empty: 0, successRate: null, consecutiveProblems: 0, alerting: false });
+    }
+    health.sources = health.sources.map(s => ({ ...s, scheduler: live.get(s.source) || null }));
+    res.set("Cache-Control", "no-store");
+    res.status(200).json(health);
+  } catch (error) {
+    console.error("Fetch ingestion health error:", error);
+    res.status(500).json({ error: "Server error while computing ingestion health" });
+  }
+};
+
 // Keep the existing admin route and run the working Bangkok importer.
 const triggerBangkokEgpIngestion = (req, res) => {
   const state = ingestionStatus();
@@ -139,6 +160,7 @@ module.exports = {
   moderatePost,
   fetchModerationLogs,
   fetchIngestionLogs,
+  fetchIngestionHealth,
   triggerBangkokEgpIngestion,
   setUserStatus,
 };

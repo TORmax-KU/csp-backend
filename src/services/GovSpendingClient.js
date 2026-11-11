@@ -1,4 +1,5 @@
 const { recentWindow, isRecentPublication } = require('./RecentProcurementWindow');
+const { fetchSource } = require('./SourceFetch');
 const SOURCE = 'govspending';
 const ENDPOINT = 'https://opend.data.go.th/govspending/service/egp-contract';
 function toRecord(row) {
@@ -27,11 +28,18 @@ async function fetchListings({ fetchImpl = fetch, env = process.env, now = new D
     for (let offset = 0; ; offset += 1000) {
       const url = new URL(ENDPOINT);
       for (const [k, v] of Object.entries({ 'api-key': env.GOVSPENDING_API_KEY, year, keyword, limit: 1000, offset })) url.searchParams.set(k, v);
-      let response;
-      try { response = await fetchImpl(url, { redirect: 'error', signal: AbortSignal.timeout(40000) }); }
-      catch { throw new Error('GovSpending request failed or timed out'); }
-      if (!response.ok) throw new Error(`GovSpending HTTP ${response.status}`);
-      const body = await response.json();
+      // NFR-04: 30 s to start responding, then a bounded download. The URL carries the API key,
+      // so errors are rewritten rather than echoing it.
+      let body;
+      try {
+        body = await fetchSource(url, { redirect: 'error' }, { fetchImpl, read: async response => {
+          if (!response.ok) throw Object.assign(new Error(`GovSpending HTTP ${response.status}`), { code: 'SOURCE_HTTP' });
+          return response.json();
+        } });
+      } catch (error) {
+        if (error.code === 'SOURCE_HTTP') throw error;
+        throw Object.assign(new Error(error.code === 'SOURCE_TIMEOUT' ? 'GovSpending did not respond in time' : 'GovSpending request failed'), { code: error.code });
+      }
       if (body.success === false) throw new Error('GovSpending rejected the request');
       if (!Array.isArray(body.data)) throw new Error('Invalid GovSpending response data');
       onProgress({ source: SOURCE, year, keyword, offset, count: body.data.length, total: body.total });

@@ -1,10 +1,10 @@
 const literalRegex = value => ({ $regex: value.replace(/[.*+?^${}()|[\]\\]/g, "\\$&"), $options: "i" });
 
-const { publicProjectQuery } = require("./ProcurementAvailability");
+const { listedProjectQuery } = require("./ProcurementAvailability");
 
 async function buildProjectQuery(params, findSkillIds, now = new Date()) {
   const invalid = message => { throw Object.assign(new Error(message), { status: 400 }); };
-  for (const key of ["search", "agency", "status", "priceFlag", "minBudget", "maxBudget", "deadline", "deadlineYear", "deadlineFrom", "deadlineTo", "availability", "method", "sort", "page", "limit"]) {
+  for (const key of ["search", "agency", "status", "priceFlag", "minBudget", "maxBudget", "deadline", "deadlineYear", "deadlineFrom", "deadlineTo", "availability", "method", "origin", "skill", "sort", "page", "limit"]) {
     if (params[key] !== undefined && typeof params[key] !== "string") invalid(`Invalid ${key}`);
   }
   const page = Number(params.page ?? 1);
@@ -15,8 +15,9 @@ async function buildProjectQuery(params, findSkillIds, now = new Date()) {
   if (params.availability && params.availability !== "open") invalid("Only open, fully analyzed TORs are searchable");
   if (params.status && params.status !== "Public") invalid("Only public projects are searchable");
   if (params.sort && !["deadline", "newest", "budget"].includes(params.sort)) invalid("Invalid sort");
-  const query = publicProjectQuery(now);
-  query.procurementMethod = { $regex: "e-bidding", $options: "i" };
+  // Eligibility lives inside $and so text search ($or) and filters apply to both
+  // verified government e-bidding TORs and open direct postings.
+  const query = { $and: [listedProjectQuery(now, { governmentFilter: { procurementMethod: { $regex: "e-bidding", $options: "i" } } })] };
   const search = (params.search || "").trim();
   if (search.length > 300) invalid("Search must be 300 characters or fewer");
   if (search) {
@@ -27,10 +28,27 @@ async function buildProjectQuery(params, findSkillIds, now = new Date()) {
     const skillIds = await findSkillIds(regex);
     if (skillIds.length) query.$or.push({ requiredSkills: { $in: skillIds } });
   }
+  // NFR-09: filter by tech stack. Matches catalog skills plus skill names from AI extraction or the publisher.
+  const skill = (params.skill || "").trim();
+  if (skill.length > 60) invalid("Skill must be 60 characters or fewer");
+  if (skill) {
+    const regex = literalRegex(skill);
+    const skillClauses = [{ "aiAnalysis.mandatorySkillNames": regex }, { sourceSkillNames: regex }];
+    const skillIds = await findSkillIds(regex);
+    if (skillIds.length) skillClauses.push({ requiredSkills: { $in: skillIds } });
+    query.$and.push({ $or: skillClauses });
+  }
   if (params.agency?.trim()) query.agency = literalRegex(params.agency.trim());
   if (params.method?.trim()) query.$and.push({ procurementMethod: literalRegex(params.method.trim()) });
   if (params.status) query.status = params.status;
-  if (params.priceFlag) query.priceFlag = params.priceFlag;
+  if (params.priceFlag) {
+    if (!["Normal", "Underpriced", "Overpriced", "ScopeMismatch"].includes(params.priceFlag)) invalid("Invalid priceFlag");
+    query.priceFlag = params.priceFlag;
+  }
+  if (params.origin) {
+    if (!["government", "direct"].includes(params.origin)) invalid("Invalid origin");
+    query.source = params.origin === "direct" ? "direct" : { $ne: "direct" };
+  }
   for (const [key, operator] of [["minBudget", "$gte"], ["maxBudget", "$lte"]]) {
     if (params[key] !== undefined && params[key] !== "") {
       const value = Number(params[key]);
