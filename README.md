@@ -79,6 +79,36 @@ for both is not built yet.
 
 ## Public data rules
 
+### Project alert preferences
+
+Edit Profile, part 5 has four independent switches: matching projects in-app,
+matching projects by email, matching projects over THB 10 million in-app, and
+matching projects over THB 10 million by email. Every rule requires the vendor's
+saved minimum skill match and budget range. Exactly THB 10 million is excluded
+from the high-budget rule. Qualifying for both rules produces one alert per
+channel. State changes use the same channel choices. In-app matching alerts are
+on by default; email and high-budget-only switches are off by default. The old
+daily-digest and SMS preferences are no longer used; they do not opt users in.
+
+Email support uses SMTP. Set `EMAIL_ALERTS_ENABLED=true`, `SMTP_HOST`,
+`SMTP_PORT`, `SMTP_SECURE`, `SMTP_USER`, `SMTP_PASSWORD`, and `EMAIL_FROM` on the
+backend server. `FRONTEND_URL` must be the browser-accessible website URL so email
+links point to the right site. Keep these credentials out of Git. Port 587 uses
+required STARTTLS; port 465 typically uses `SMTP_SECURE=true`. A local SMTP test
+server may use `SMTP_ALLOW_INSECURE_LOCAL=true` with a loopback host outside production.
+SMTP is a separate protocol, so the HTTP Postman simulations are not used for it.
+
+The backend queues email independently of the in-app notification list and checks
+the queue every 30 seconds in bounded batches. It rechecks preferences, account
+status, matching, and project availability before sending. Enablement can send
+still-eligible queued alerts. Temporary errors retry up to five attempts with
+backoff; permanent delivery failures stop. The `emailAlerts` collection records
+pending, processing, sent, skipped, and failed states without storing SMTP secrets.
+A successful SMTP response means the sender accepted the email, not that it reached
+the inbox. A process failure after SMTP acceptance can cause a duplicate on retry;
+stable Message-IDs help receivers identify duplicates but are not an exactly-once guarantee.
+This is event-based email, with no 07:30 digest or SMS delivery.
+
 - User profiles are private: `GET /api/users` requires an administrator;
   `GET /api/users/:id` requires the account owner or an administrator. Anonymous
   requests return 401; cross-account requests return 403. Invalid IDs return

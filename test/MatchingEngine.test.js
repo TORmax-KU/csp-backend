@@ -9,15 +9,22 @@ const query = rows => ({ select: () => ({ lean: async () => rows.map(row => ({ .
 function fakeModels({ users, projects, skills }) {
   const matches = [];
   const notifications = [];
+  const emailAlerts = [];
+  const deliveryModel = rows => ({ updateOne: async (filter, update) => {
+    if (rows.some(row => row.userId === filter.userId && row.eventKey === filter.eventKey)) return { upsertedCount: 0 };
+    rows.push({ ...update.$setOnInsert });
+    return { upsertedCount: 1 };
+  } });
   let nextId = 1;
   const inIds = (filter, key, row) => !filter[key]?.$in || filter[key].$in.map(String).includes(String(row[key]));
   return {
-    matches: matches, notifications: notifications,
+    matches: matches, notifications: notifications, emailAlerts,
     models: {
       users: { find: filter => query(users.filter(u => inIds(filter, "_id", u))) },
       projects: { find: filter => query(filter._id ? projects.filter(p => inIds(filter, "_id", p)) : projects.filter(p => p.open)) },
       skills: { find: () => query(skills) },
-      notifications: { create: async doc => notifications.push(doc) },
+      notifications: deliveryModel(notifications),
+      emailAlerts: deliveryModel(emailAlerts),
       matches: {
         find: filter => query(matches.filter(m => inIds(filter, "userId", m))),
         deleteOne: async ({ _id }) => { matches.splice(matches.findIndex(m => m._id === _id), 1); },
@@ -28,7 +35,7 @@ function fakeModels({ users, projects, skills }) {
           if (found) { Object.assign(found, update.$set); return { modifiedCount: 1 }; }
           if (!options.upsert) return { modifiedCount: 0 };
           matches.push({ _id: `m${nextId++}`, ...filter, ...update.$setOnInsert, ...update.$set });
-          return { upsertedCount: 1 };
+          return { upsertedCount: 1, upsertedId: matches.at(-1)._id };
         },
       },
     },
@@ -51,7 +58,7 @@ test("matches on skill threshold and budget, notifies once, and reports state ch
   const run = () => runMatching({ models: db.models });
 
   assert.deepEqual(await run(), { newMatches: 1, removed: 0, statusChanges: 0 });
-  assert.deepEqual(db.notifications, [{ userId: "u1", projectId: "full", type: "NewMatch", matchPercentage: 100 }]);
+  assert.deepEqual(db.notifications, [{ userId: "u1", projectId: "full", type: "NewMatch", matchPercentage: 100, eventKey: "match:m1", highBudget: false }]);
   assert.equal(db.matches[0].notifiedState, "open");
 
   assert.deepEqual(await run(), { newMatches: 0, removed: 0, statusChanges: 0 });
@@ -68,7 +75,7 @@ test("matches on skill threshold and budget, notifies once, and reports state ch
 
   Object.assign(projects[0], { procurementStatus: "cancelled" });
   assert.deepEqual(await run(), { newMatches: 0, removed: 0, statusChanges: 1 });
-  assert.deepEqual(db.notifications.at(-1), { userId: "u1", projectId: "full", type: "StatusChange", fromState: "open", toState: "cancelled" });
+  assert.deepEqual(db.notifications.at(-1), { userId: "u1", projectId: "full", type: "StatusChange", fromState: "open", toState: "cancelled", eventKey: "match:m2:state:1", highBudget: false });
   assert.deepEqual(await run(), { newMatches: 0, removed: 0, statusChanges: 0 });
   assert.equal(db.notifications.length, 3);
 
@@ -115,6 +122,47 @@ test("trackedState reports drafts and hides transient unknown", () => {
   assert.equal(trackedState({ status: "Draft", procurementStatus: "open" }), "draft");
   assert.equal(trackedState({ status: "Public", procurementStatus: "unknown" }), null);
   assert.equal(trackedState({ status: "Public", procurementStatus: "awarded" }), "awarded");
+});
+
+test("four independent channels respect threshold, budget, strict 10M boundary and deduplicate overlapping rules", async () => {
+  const vendor = { _id: "u1", proficiency: ["react"], matchThreshold: 50, maxBudget: 20_000_000,
+    notifyMatchesInApp: false, notifyMatchesEmail: false, notifyHighBudgetInApp: true, notifyHighBudgetEmail: true };
+  const projects = [tor("boundary", ["React"], 10_000_000), tor("high", ["React", "Java"], 10_000_001),
+    tor("no-match", ["Java"], 15_000_000), tor("over-range", ["React"], 21_000_000)];
+  const db = fakeModels({ users: [vendor], projects, skills });
+  await runMatching({ models: db.models });
+  assert.deepEqual(db.notifications.map(n => n.projectId), ["high"]);
+  assert.deepEqual(db.emailAlerts.map(n => n.projectId), ["high"]);
+  assert.equal(db.matches.length, 2); // turning off alerts never hides matching opportunities
+  vendor.notifyMatchesInApp = true;
+  vendor.notifyMatchesEmail = true;
+  await runMatching({ models: db.models });
+  assert.deepEqual(db.notifications.map(n => n.projectId), ["high", "boundary"]);
+  assert.equal(db.emailAlerts.length, 2);
+  await runMatching({ models: db.models });
+  assert.equal(db.notifications.length, 2);
+  assert.equal(db.emailAlerts.length, 2);
+  vendor.notifyMatchesInApp = false;
+  vendor.notifyHighBudgetInApp = false;
+  Object.assign(projects[1], { open: false, procurementStatus: "cancelled" });
+  await runMatching({ models: db.models });
+  assert.equal(db.notifications.length, 2);
+  assert.equal(db.emailAlerts.at(-1).type, "StatusChange");
+});
+
+test("a dispatch failure retries the existing match and state event on the next sweep", async () => {
+  const vendor = { _id: "u1", proficiency: ["react"] };
+  const projects = [tor("t1", ["React"], 1_000_000)];
+  const db = fakeModels({ users: [vendor], projects, skills });
+  await assert.rejects(runMatching({ models: db.models, deliver: async () => { throw new Error("DB unavailable"); } }));
+  assert.equal(db.matches.length, 1);
+  await runMatching({ models: db.models });
+  assert.equal(db.notifications.length, 1);
+  Object.assign(projects[0], { open: false, procurementStatus: "cancelled" });
+  await assert.rejects(runMatching({ models: db.models, deliver: async () => { throw new Error("DB unavailable"); } }));
+  assert.equal(db.matches[0].notifiedState, "open");
+  await runMatching({ models: db.models });
+  assert.equal(db.notifications.at(-1).type, "StatusChange");
 });
 
 

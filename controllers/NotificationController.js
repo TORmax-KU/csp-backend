@@ -5,7 +5,7 @@ const fetchForUser = async (req, res) => {
   try {
     const { read, page = 1, limit = 20 } = req.query;
 
-    const query = { userId: req.user._id };
+    const query = { userId: req.user._id, deleted: { $ne: true } };
     if (read !== undefined) query.read = read === "true";
 
     const [notifications, total, unreadCount] = await Promise.all([
@@ -15,7 +15,7 @@ const fetchForUser = async (req, res) => {
         .skip((page - 1) * Number(limit))
         .limit(Number(limit)),
       Notification.countDocuments(query),
-      Notification.countDocuments({ userId: req.user._id, read: false }),
+      Notification.countDocuments({ userId: req.user._id, read: false, deleted: { $ne: true } }),
     ]);
 
     res.status(200).json({ notifications, total, unreadCount, page: Number(page), limit: Number(limit) });
@@ -34,7 +34,7 @@ const markRead = async (req, res) => {
     }
 
     const notification = await Notification.findById(req.params.id);
-    if (!notification) return res.status(404).json({ message: "Notification not found" });
+    if (!notification || notification.deleted) return res.status(404).json({ message: "Notification not found" });
 
     if (notification.userId.toString() !== req.user._id.toString()) {
       return res.status(403).json({ message: "Forbidden" });
@@ -52,7 +52,7 @@ const markRead = async (req, res) => {
 
 const markAllRead = async (req, res) => {
   try {
-    await Notification.updateMany({ userId: req.user._id, read: false }, { read: true });
+    await Notification.updateMany({ userId: req.user._id, read: false, deleted: { $ne: true } }, { read: true });
     res.status(200).json({ message: "All notifications marked as read" });
   } catch (error) {
     console.error("Mark all read error:", error);
@@ -65,8 +65,9 @@ const remove = async (req, res) => {
     if (!mongoose.isValidObjectId(req.params.id)) return res.status(404).json({ message: "Notification not found" });
 
     // Scoped to the owner, so another user's id simply reports not found.
-    const result = await Notification.deleteOne({ _id: req.params.id, userId: req.user._id });
-    if (!result.deletedCount) return res.status(404).json({ message: "Notification not found" });
+    const result = await Notification.updateOne({ _id: req.params.id, userId: req.user._id, deleted: { $ne: true } },
+      { $set: { deleted: true, read: true } });
+    if (!result.modifiedCount) return res.status(404).json({ message: "Notification not found" });
 
     res.status(200).json({ message: "Notification deleted" });
   } catch (error) {

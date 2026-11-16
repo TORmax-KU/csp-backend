@@ -116,6 +116,10 @@ const UserSchema = new mongoose.Schema({
         max: 95,
         default: 75,
     },
+    notifyMatchesInApp: { type: Boolean, default: true },
+    notifyMatchesEmail: { type: Boolean, default: false },
+    notifyHighBudgetInApp: { type: Boolean, default: false },
+    notifyHighBudgetEmail: { type: Boolean, default: false },
     dailyDigestEmail: {
         type: Boolean,
         default: true,

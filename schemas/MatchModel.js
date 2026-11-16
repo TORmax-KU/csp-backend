@@ -26,6 +26,7 @@ const MatchSchema = new mongoose.Schema({
         type: String,
         default: null,
     },
+    notifiedVersion: { type: Number, default: 0 },
 }, {
     collection: "matches",
     timestamps: true,

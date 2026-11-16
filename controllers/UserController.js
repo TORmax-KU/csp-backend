@@ -17,6 +17,10 @@ const EDITABLE_FIELDS = [
   "nbtcLicense",
   "trackedKeywords",
   "matchThreshold",
+  "notifyMatchesInApp",
+  "notifyMatchesEmail",
+  "notifyHighBudgetInApp",
+  "notifyHighBudgetEmail",
   "dailyDigestEmail",
   "smsAlerts",
   "contactPhone",
@@ -27,7 +31,8 @@ const EDITABLE_FIELDS = [
 ];
 
 // Changing any of these re-runs matching for the user (Use Case 2).
-const MATCHING_FIELDS = ["skillNames", "minBudget", "maxBudget", "matchThreshold"];
+const ALERT_FIELDS = ["notifyMatchesInApp", "notifyMatchesEmail", "notifyHighBudgetInApp", "notifyHighBudgetEmail"];
+const MATCHING_FIELDS = ["skillNames", "minBudget", "maxBudget", "matchThreshold", ...ALERT_FIELDS];
 
 const fetch = async (req, res) => {
   try {
@@ -79,6 +84,11 @@ const update = async (req, res) => {
     if (!user) return res.status(404).json({ message: "User not found" });
 
     const patch = {};
+    for (const field of ALERT_FIELDS) {
+      if (req.body[field] !== undefined && typeof req.body[field] !== "boolean") {
+        return res.status(400).json({ message: `${field} must be a boolean` });
+      }
+    }
     for (const field of EDITABLE_FIELDS) {
       if (req.body[field] !== undefined) patch[field] = req.body[field];
     }

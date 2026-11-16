@@ -43,6 +43,7 @@ const { startIngestionScheduler } = require("./services/IngestionScheduler");
 const { startTorAnalysisWorker } = require("./services/TorAnalysisWorker");
 const { startMatchingScheduler } = require("./services/MatchingEngine");
 const { startPriceAnalysisScheduler } = require("./services/PriceAnalysis");
+const { startEmailAlertWorker } = require("./services/EmailAlerts");
 
 app.use("/auth", authRoutes);
 app.use("/api/users", userRoutes);
@@ -60,10 +61,13 @@ mongoose
     const { seedRecommendedSkills } = require('./services/RecommendedSkills');
     const { findOrCreateSkill } = require('./services/SkillCatalog');
     await seedRecommendedSkills(findOrCreateSkill);
+    // Deduplication keys must exist before concurrent matching/email workers start.
+    await Promise.all([require('./models/Notification').init(), require('./models/EmailAlert').init()]);
     startIngestionScheduler();
     startTorAnalysisWorker();
     startMatchingScheduler();
     startPriceAnalysisScheduler();
+    startEmailAlertWorker();
   })
   .catch((error) => {
     console.error("MongoDB connection error:", error);

@@ -5,6 +5,7 @@ const Match = require("../models/Match");
 const Notification = require("../models/Notification");
 const { listedProjectQuery, DIRECT_SOURCE } = require("./ProcurementAvailability");
 const { resolveSkills, calculateMatch } = require("./SkillMatching");
+const { ALERT_FIELDS, dispatchNotification } = require("./NotificationDelivery");
 
 const DEFAULT_THRESHOLD = 75;
 const SWEEP_INTERVAL_MS = 5 * 60 * 1000;
@@ -48,14 +49,14 @@ const ignoreDuplicate = error => { if (error.code !== 11000) throw error; return
 
 // Safe to run concurrently (scheduler + profile saves, or several backends): the unique
 // (userId, projectId) index and conditional state updates ensure each event notifies once.
-async function runMatching({ userIds, now = new Date(), models = defaultModels } = {}) {
-  const { projects, users, skills, matches, notifications } = models;
+async function runMatching({ userIds, now = new Date(), models = defaultModels, deliver = input => dispatchNotification(input, models) } = {}) {
+  const { projects, users, skills, matches } = models;
   const counts = { newMatches: 0, removed: 0, statusChanges: 0 };
 
   const vendorFilter = { role: "Vendor", status: "Active" };
   if (userIds) vendorFilter._id = { $in: userIds };
   const [vendors, candidates, catalog] = await Promise.all([
-    users.find(vendorFilter).select("proficiency minBudget maxBudget matchThreshold").lean(),
+    users.find(vendorFilter).select(`proficiency minBudget maxBudget matchThreshold ${ALERT_FIELDS.join(" ")}`).lean(),
     projects.find(listedProjectQuery(now))
       .select("source status procurementStatus deadline budget requiredSkills analysisStatus aiAnalysis.mandatorySkillNames aiAnalysis.unmappedSkillNames")
       .lean(),
@@ -90,7 +91,11 @@ async function runMatching({ userIds, now = new Date(), models = defaultModels }
         }
         continue;
       }
-      if (previous?.matchPercentage === result.matchPercentage) continue;
+      if (previous?.matchPercentage === result.matchPercentage) {
+        // Newly enabled channels and failed dispatches reuse this persistent event.
+        await deliver({ user, project, eventKey: `match:${previous._id}`, type: "NewMatch", matchPercentage: result.matchPercentage });
+        continue;
+      }
 
       const write = await matches.updateOne(
         { userId: user._id, projectId: project._id },
@@ -99,9 +104,9 @@ async function runMatching({ userIds, now = new Date(), models = defaultModels }
         { upsert: true }
       ).catch(ignoreDuplicate);
 
+      const matchId = previous?._id || write.upsertedId;
+      if (matchId) await deliver({ user, project, eventKey: `match:${matchId}`, type: "NewMatch", matchPercentage: result.matchPercentage });
       if (write.upsertedCount) {
-        await notifications.create({ userId: user._id, projectId: project._id, type: "NewMatch",
-          matchPercentage: result.matchPercentage });
         counts.newMatches += 1;
       }
     }
@@ -109,12 +114,14 @@ async function runMatching({ userIds, now = new Date(), models = defaultModels }
 
   // FR-10: report state changes (e.g. open -> cancelled) on every matched TOR, open or not.
   const tracked = await matches.find(userIds ? { userId: { $in: userIds } } : {})
-    .select("userId projectId notifiedState").lean();
+    .select("userId projectId notifiedState notifiedVersion").lean();
   const current = new Map((await projects.find({ _id: { $in: [...new Set(tracked.map(m => String(m.projectId)))] } })
-    .select("source status procurementStatus deadline").lean())
+    .select("source status procurementStatus deadline budget").lean())
     .map(p => [String(p._id), p]));
 
   for (const match of tracked) {
+    const user = vendors.find(vendor => String(vendor._id) === String(match.userId));
+    if (!user) continue;
     const project = current.get(String(match.projectId));
     if (!project) {
       await matches.deleteOne({ _id: match._id });
@@ -124,12 +131,15 @@ async function runMatching({ userIds, now = new Date(), models = defaultModels }
     const state = trackedState(project, now);
     if (!state || state === match.notifiedState) continue;
 
-    const claim = await matches.updateOne({ _id: match._id, notifiedState: match.notifiedState }, { $set: { notifiedState: state } });
+    const nextVersion = (match.notifiedVersion || 0) + 1;
+    // Queue before advancing state so a failed dispatch can retry next sweep.
+    if (match.notifiedState) await deliver({ user, project, eventKey: `match:${match._id}:state:${nextVersion}`,
+      type: "StatusChange", fromState: match.notifiedState, toState: state });
+    const claim = await matches.updateOne({ _id: match._id, notifiedState: match.notifiedState },
+      { $set: { notifiedState: state, notifiedVersion: nextVersion } });
     // A first known state is recorded silently; there is no earlier state to report a change from.
     if (!claim.modifiedCount || !match.notifiedState) continue;
 
-    await notifications.create({ userId: match.userId, projectId: match.projectId, type: "StatusChange",
-      fromState: match.notifiedState, toState: state });
     counts.statusChanges += 1;
   }
 

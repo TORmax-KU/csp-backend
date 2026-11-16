@@ -13,10 +13,14 @@ test("notifications can be marked unread and deleted only by their owner", async
   t.mock.method(note, "save", async () => note);
   t.mock.method(Notification, "findById", async (id) => (String(id) === NOTE ? note : null));
   const deleted = [];
-  t.mock.method(Notification, "deleteOne", async (filter) => {
-    const hit = filter._id === NOTE && String(filter.userId) === OWNER;
-    if (hit) deleted.push(filter._id);
-    return { deletedCount: hit ? 1 : 0 };
+  t.mock.method(Notification, "updateOne", async (filter, update) => {
+    const hit = filter._id === NOTE && String(filter.userId) === OWNER && !note.deleted;
+    if (hit) {
+      assert.deepEqual(update.$set, { deleted: true, read: true });
+      Object.assign(note, update.$set);
+      deleted.push(filter._id);
+    }
+    return { modifiedCount: hit ? 1 : 0 };
   });
 
   let identity = { _id: OTHER };
@@ -48,6 +52,8 @@ test("notifications can be marked unread and deleted only by their owner", async
 
     assert.equal((await fetch(`${base}/${NOTE}`, { method: "DELETE" })).status, 200);
     assert.deepEqual(deleted, [NOTE]);
+    assert.equal((await fetch(`${base}/${NOTE}`, { method: "DELETE" })).status, 404);
+    assert.equal((await patch(NOTE, {})).status, 404);
   } finally {
     await new Promise(resolve => server.close(resolve));
   }
