@@ -136,6 +136,7 @@ async function createPosting(req, res) {
 
 const update = async (req, res) => {
   try {
+    if (!/^[a-f\d]{24}$/i.test(req.params.id)) return res.status(404).json({ message: "Project not found" });
     const project = await Project.findById(req.params.id);
     if (!project) return res.status(404).json({ message: "Project not found" });
 
@@ -192,6 +193,7 @@ async function updatePosting(req, res, project) {
 
 const deleteProject = async (req, res) => {
   try {
+    if (!/^[a-f\d]{24}$/i.test(req.params.id)) return res.status(404).json({ message: "Project not found" });
     const project = await Project.findById(req.params.id);
     if (!project) return res.status(404).json({ message: "Project not found" });
 

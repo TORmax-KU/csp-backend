@@ -55,6 +55,18 @@ test("overall success rate is compared with the 95% target", async () => {
   assert.equal(health.overall.meetsTarget, true);
 });
 
+test("partial record failures cannot inflate ingestion health even in older Success logs", async () => {
+  const partial = { ...run("Success", 20, 10), projectsFailed: 3 };
+  const health = summarizeSource("bangkok-egp", [partial, run("Success", 10, 5)]);
+  assert.equal(health.failed, 1);
+  assert.equal(health.succeeded, 1);
+  assert.equal(health.successRate, 0.5);
+  assert.equal(health.lastError, "3 records failed");
+  const monitor = createIngestionMonitor({ env: {}, notify: async () => {}, logs: { exists: async () => true } });
+  const outcome = await monitor.observe("bangkok-egp", { log: partial });
+  assert.equal(outcome.reason, "failed");
+});
+
 test("monitor alerts once after consecutive problems, then once on recovery", async () => {
   const sent = [];
   let hadListings = true;

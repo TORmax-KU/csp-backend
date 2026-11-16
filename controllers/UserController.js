@@ -1,6 +1,7 @@
 const User = require("../src/models/User");
 const { parseSkillNames, findOrCreateSkill } = require("../src/services/SkillCatalog");
 const { runMatching } = require("../src/services/MatchingEngine");
+const { validateProfilePatch } = require("../src/services/ProfileValidation");
 
 const EDITABLE_FIELDS = [
   "username",
@@ -83,6 +84,8 @@ const update = async (req, res) => {
     const user = await User.findById(id);
     if (!user) return res.status(404).json({ message: "User not found" });
 
+    const errors = validateProfilePatch(req.body, user);
+    if (Object.keys(errors).length) return res.status(400).json({ message: "Please fix the highlighted fields", errors, error: Object.values(errors).join(", ") });
     const patch = {};
     for (const field of ALERT_FIELDS) {
       if (req.body[field] !== undefined && typeof req.body[field] !== "boolean") {
@@ -115,6 +118,7 @@ const update = async (req, res) => {
 
     res.status(200).json(updated);
   } catch (error) {
+    if (error.code === 11000) return res.status(409).json({ error: "This username is already in use" });
     if (error.name === "ValidationError") {
       const messages = Object.values(error.errors).map((e) => e.message);
       return res.status(400).json({ error: messages.join(", ") });

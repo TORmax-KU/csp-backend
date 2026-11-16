@@ -6,6 +6,28 @@ const { smtpOptions, processEmailAlert } = require("../src/services/EmailAlerts"
 const { alertChannels } = require("../src/services/NotificationDelivery");
 const { UserSchema } = require("../schemas/UserModel");
 const mongoose = require("mongoose");
+const { spawnSync } = require("node:child_process");
+
+test("missing optional mail package cannot crash module loading or disabled/enabled worker startup", () => {
+  const result = spawnSync(process.execPath, ["-e", `
+    const assert = require('node:assert/strict');
+    const Module = require('node:module');
+    const originalLoad = Module._load;
+    Module._load = function(name, ...args) {
+      if (name === 'nodemailer') throw Object.assign(new Error('Missing optional dependency'), { code: 'MODULE_NOT_FOUND' });
+      return originalLoad.call(this, name, ...args);
+    };
+    const { startEmailAlertWorker } = require('./src/services/EmailAlerts');
+    const errors = [];
+    const log = { error: message => errors.push(message) };
+    assert.equal(startEmailAlertWorker({ env: {}, log }), undefined);
+    assert.equal(errors.length, 0);
+    assert.equal(startEmailAlertWorker({ env: { EMAIL_ALERTS_ENABLED: 'true', SMTP_HOST: 'smtp.example.test', EMAIL_FROM: 'alerts@example.test' }, log }), undefined);
+    assert.equal(errors.length, 1);
+    assert.match(errors[0], /Other features remain available/);
+  `], { cwd: require('node:path').resolve(__dirname, '..'), encoding: "utf8" });
+  assert.equal(result.status, 0, result.stderr);
+});
 
 test("all 16 preference combinations route independently; legacy email/SMS values never opt in", () => {
   for (let mask = 0; mask < 16; mask++) {

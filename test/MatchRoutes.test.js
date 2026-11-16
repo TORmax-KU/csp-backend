@@ -3,6 +3,7 @@ const assert = require("node:assert/strict");
 const express = require("express");
 const Match = require("../src/models/Match");
 const Project = require("../src/models/Project");
+const Skill = require("../src/models/Skill");
 const matchRoutes = require("../src/routes/match");
 
 const VENDOR = "012345678901234567890123";
@@ -44,6 +45,8 @@ test("rejects anonymous users and invalid paging before querying", async (t) => 
 
 test("lists only the caller's matches on open TORs, best match first, then soonest deadline", async (t) => {
   const deadline = days => new Date(Date.now() + days * 86400000);
+  t.mock.method(Skill, "find", () => chain([]));
+  const baseProject = { source: "direct", status: "Public", analysisStatus: "skipped", budget: 10000, requiredSkills: ["s1", "s2", "s3", "s4", "s5"] };
   t.mock.method(Match, "find", (filter) => {
     assert.equal(filter.userId, VENDOR);
     return chain([
@@ -63,13 +66,13 @@ test("lists only the caller's matches on open TORs, best match first, then soone
     assert.equal(direct.procurementStatus, "open");
     // The open-feed query filtered out CLOSED.
     return chain([
-      { _id: A, title: "A", procurementStatus: "open", deadline: deadline(20) },
-      { _id: B, title: "B", procurementStatus: "open", deadline: deadline(30) },
-      { _id: C, title: "C", procurementStatus: "open", deadline: deadline(10) },
+      { ...baseProject, _id: A, title: "A", procurementStatus: "open", deadline: deadline(20) },
+      { ...baseProject, _id: B, title: "B", requiredSkills: ["s1", "s2"], procurementStatus: "open", deadline: deadline(30) },
+      { ...baseProject, _id: C, title: "C", procurementStatus: "open", deadline: deadline(10) },
     ]);
   });
 
-  const identity = { _id: VENDOR, role: "Vendor", proficiency: ["s1"], matchThreshold: 80, minBudget: 1000 };
+  const identity = { _id: VENDOR, role: "Vendor", proficiency: ["s1", "s2", "s3", "s4"], matchThreshold: 80, minBudget: 1000 };
   const { server, base } = await startApp(() => identity);
   try {
     const response = await fetch(base);
@@ -122,7 +125,7 @@ test("removing all skills hides stale matches before the background sweep", asyn
 test("TOR match breakdown names matched and missing skills and agrees with the engine's rule", async (t) => {
   const Skill = require("../src/models/Skill");
   const { matchSkills } = require("../controllers/TorAnalysisController");
-  const project = { _id: A, analysisStatus: "completed", budget: 9000000,
+  const project = { _id: A, status: "Public", analysisStatus: "completed", budget: 9000000,
     aiAnalysis: { mandatorySkillNames: ["React", "Node.js", "Go", "Java"] } };
   t.mock.method(Project, "findById", () => ({ lean: async () => structuredClone(project) }));
   t.mock.method(Skill, "find", () => chain(["react", "node", "go", "java"].map((id, i) => ({ _id: id, name: project.aiAnalysis.mandatorySkillNames[i] }))));
@@ -145,4 +148,22 @@ test("TOR match breakdown names matched and missing skills and agrees with the e
   const fits = await call({ proficiency: ["react", "node", "go"] });
   assert.equal(fits.budgetFit, "within");
   assert.equal(fits.isMatch, true);
+});
+
+test("cached matches cannot bypass updated skills, threshold or budget filters", async t => {
+  t.mock.method(Match, "find", () => chain([{ projectId: A, matchPercentage: 100 }]));
+  t.mock.method(Skill, "find", () => chain([]));
+  t.mock.method(Project, "find", () => chain([{ _id: A, source: "direct", status: "Public", analysisStatus: "skipped",
+    requiredSkills: ["s1", "s2"], budget: 1000000, deadline: new Date(Date.now() + 86400000), procurementStatus: "open" }]));
+  const user = { _id: VENDOR, role: "Vendor", proficiency: ["s1"], matchThreshold: 75 };
+  const { server, base } = await startApp(() => user);
+  try {
+    assert.equal((await (await fetch(base)).json()).total, 0);
+    user.matchThreshold = 50;
+    const body = await (await fetch(base)).json();
+    assert.equal(body.total, 1);
+    assert.equal(body.projects[0].match.percentage, 50);
+    user.maxBudget = 500000;
+    assert.equal((await (await fetch(base)).json()).total, 0);
+  } finally { await new Promise(resolve => server.close(resolve)); }
 });

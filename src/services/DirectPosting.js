@@ -19,6 +19,7 @@ function httpsUrl(value) {
 
 function money(value) {
   if (value === null || value === "" || value === undefined) return null;
+  if (!["number", "string"].includes(typeof value)) return NaN;
   const number = typeof value === "number" ? value : Number(value);
   return Number.isFinite(number) ? number : NaN;
 }
@@ -74,8 +75,16 @@ function validatePosting(input, { existing = null, now = new Date() } = {}) {
   else value.deadline = deadline;
 
   const contactInput = body.contact !== undefined ? body.contact : existing?.contact;
-  const contact = contactInput && typeof contactInput === "object" ? contactInput : {};
-  value.contact = { name: text(contact.name) || "", email: (text(contact.email) || "").toLowerCase(), phone: text(contact.phone) || "" };
+  const contact = contactInput && typeof contactInput === "object" && !Array.isArray(contactInput) ? contactInput : {};
+  const contactText = key => {
+    if (contact[key] == null) return "";
+    if (typeof contact[key] !== "string") {
+      errors[`contact.${key}`] = "Enter text for this contact field";
+      return "";
+    }
+    return contact[key].trim();
+  };
+  value.contact = { name: contactText("name"), email: contactText("email").toLowerCase(), phone: contactText("phone") };
   if (!value.contact.name) errors["contact.name"] = "Enter a contact name";
   else if (value.contact.name.length > 100) errors["contact.name"] = "Contact name must be 100 characters or fewer";
   if (value.contact.email && (!EMAIL.test(value.contact.email) || value.contact.email.length > 200)) errors["contact.email"] = "Enter a valid email address";

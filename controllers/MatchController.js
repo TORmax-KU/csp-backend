@@ -1,7 +1,8 @@
 const Match = require("../src/models/Match");
 const Project = require("../src/models/Project");
+const Skill = require("../src/models/Skill");
 const { availability, listedProjectQuery } = require("../src/services/ProcurementAvailability");
-const { DEFAULT_THRESHOLD } = require("../src/services/MatchingEngine");
+const { DEFAULT_THRESHOLD, scoreProject } = require("../src/services/MatchingEngine");
 
 const MAX_LIMIT = 100;
 const time = value => (value ? new Date(value).getTime() : Infinity);
@@ -24,16 +25,19 @@ const fetchForUser = async (req, res) => {
     const byProject = new Map(matches.map(match => [String(match.projectId), match]));
 
     // Bounded by the number of open TORs, so sorting and paging in memory stays cheap.
-    const projects = byProject.size ? await Project.find({ ...listedProjectQuery(new Date()), _id: { $in: [...byProject.keys()] } })
+    const [projects, catalog] = byProject.size ? await Promise.all([Project.find({ ...listedProjectQuery(new Date()), _id: { $in: [...byProject.keys()] } })
       .select("-rawData -analysisError -analysisLease")
       .populate("requiredSkills", "name category")
       .populate("publisherId", "username")
-      .lean() : [];
+      .lean(), Skill.find({}).select("name").lean()]) : [[], []];
 
-    const items = projects.map(project => {
-      const match = byProject.get(String(project._id));
+    const items = projects.flatMap(project => {
+      // Profile changes must take effect immediately, even before the asynchronous
+      // sweep replaces a previously stored score or removes a stale match.
+      const result = scoreProject(project, user, catalog);
+      if (!result) return [];
       return { ...project, availability: availability(project),
-        match: { percentage: match.matchPercentage, matchedSkillIds: match.matchedSkillIds || [] } };
+        match: { percentage: result.matchPercentage, matchedSkillIds: result.matchedSkillIds } };
     }).sort((a, b) => (b.match.percentage ?? 0) - (a.match.percentage ?? 0)
       || time(a.deadline) - time(b.deadline)
       || String(a._id).localeCompare(String(b._id)));

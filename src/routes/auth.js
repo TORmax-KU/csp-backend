@@ -4,6 +4,12 @@ const { register, login } = require("../../controllers/AuthController");
 
 const router = express.Router();
 
+// Public capability flags only; no credentials are exposed.
+router.get("/options", (req, res) => {
+  res.set("Cache-Control", "no-store");
+  res.json({ googleEnabled: Boolean(process.env.GOOGLE_CLIENT_ID && process.env.GOOGLE_CLIENT_SECRET) });
+});
+
 router.post("/register", register);
 router.post("/login", login);
 

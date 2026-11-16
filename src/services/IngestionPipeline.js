@@ -128,9 +128,8 @@ const ingestRecords = async ({
   return IngestionLog.create({
     source,
     sourceUrl,
-    status: counters.projectsFailed === (records || []).length && records?.length
-      ? "Failed"
-      : "Success",
+    // Do not report a healthy run when even some records failed to persist.
+    status: counters.projectsFailed > 0 ? "Failed" : "Success",
     recordsFetched: (records || []).length,
     torsIngested: counters.projectsCreated + counters.projectsUpdated,
     ...counters,

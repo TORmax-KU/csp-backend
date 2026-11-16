@@ -24,7 +24,7 @@ async function matchSkills(req, res, next) {
   try {
     if (!mongoose.isValidObjectId(req.params.id)) return res.status(400).json({ message: "Invalid project ID" });
     const project = await Project.findById(req.params.id).lean();
-    if (!project) return res.status(404).json({ message: "Project not found" });
+    if (!project || project.status !== "Public") return res.status(404).json({ message: "Project not found" });
     const catalog = await Skill.find({}).select("name").lean();
     // Re-resolve against the current catalog so admin-added skills need no paid re-analysis.
     if (project.analysisStatus === "completed" && project.aiAnalysis?.mandatorySkillNames?.length) {

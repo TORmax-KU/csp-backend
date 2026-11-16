@@ -9,18 +9,19 @@ const ALERT_AFTER = 3;                // consecutive problem runs (15 minutes at
 const EMPTY_LOOKBACK_MS = 7 * 24 * 60 * 60 * 1000;
 
 const isEmpty = log => log.status === "Success" && log.recordsFetched === 0;
+const isFailure = log => log?.status === "Failed" || Number(log?.projectsFailed) > 0;
 
 // Per-source health over a window. `logs` are one source's runs, newest first.
 function summarizeSource(source, logs) {
   const nonEmptySeen = logs.some(log => log.status === "Success" && log.recordsFetched > 0);
-  const problem = log => log.status === "Failed" || (isEmpty(log) && nonEmptySeen);
-  const failed = logs.filter(log => log.status === "Failed").length;
+  const problem = log => isFailure(log) || (isEmpty(log) && nonEmptySeen);
+  const failed = logs.filter(isFailure).length;
   const empty = logs.filter(log => isEmpty(log) && nonEmptySeen).length;
   const succeeded = logs.length - failed - empty;
   let consecutiveProblems = 0;
   while (consecutiveProblems < logs.length && problem(logs[consecutiveProblems])) consecutiveProblems += 1;
   const lastSuccess = logs.find(log => !problem(log));
-  const lastFailure = logs.find(log => log.status === "Failed");
+  const lastFailure = logs.find(isFailure);
   return {
     source,
     runs: logs.length,
@@ -30,7 +31,7 @@ function summarizeSource(source, logs) {
     successRate: logs.length ? Math.round(succeeded / logs.length * 1000) / 1000 : null,
     lastRunAt: logs[0]?.startedAt ?? null,
     lastSuccessAt: lastSuccess?.startedAt ?? null,
-    lastError: lastFailure?.errorMessage || null,
+    lastError: lastFailure?.errorMessage || (lastFailure?.projectsFailed ? `${lastFailure.projectsFailed} records failed` : null),
     consecutiveProblems,
     alerting: consecutiveProblems >= ALERT_AFTER,
   };
@@ -39,7 +40,7 @@ function summarizeSource(source, logs) {
 async function ingestionHealth({ logs = IngestionLog, days = 7, now = new Date() } = {}) {
   const since = new Date(now.getTime() - days * 24 * 60 * 60 * 1000);
   const rows = await logs.find({ startedAt: { $gte: since } })
-    .select("source status recordsFetched errorMessage startedAt")
+    .select("source status recordsFetched projectsFailed errorMessage startedAt")
     .sort({ startedAt: -1, _id: -1 }).lean();
   const bySource = new Map();
   for (const row of rows) {
@@ -87,7 +88,7 @@ function createIngestionMonitor({ env = process.env, logs = IngestionLog, logger
   }
 
   async function observe(source, { log, error } = {}) {
-    const failed = Boolean(error) || log?.status === "Failed";
+    const failed = Boolean(error) || isFailure(log);
     const empty = !failed && log ? await suspiciousEmpty(source, log) : false;
     const streak = streaks.get(source) || { count: 0, alerted: false };
     if (!failed && !empty) {

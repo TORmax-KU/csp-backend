@@ -1,5 +1,4 @@
 const { randomUUID, createHash } = require("node:crypto");
-const nodemailer = require("nodemailer");
 const EmailAlert = require("../models/EmailAlert");
 const User = require("../models/User");
 const Project = require("../models/Project");
@@ -89,7 +88,15 @@ function startEmailAlertWorker({ env = process.env, log = console } = {}) {
   let options;
   try { options = smtpOptions(env); } catch (error) { log.error(error.message); return; }
   if (!options) return;
-  const transport = nodemailer.createTransport(options);
+  let transport;
+  try {
+    // Optional email dependencies must never prevent authentication or browsing
+    // from starting, including development containers with an older dependency volume.
+    transport = require("nodemailer").createTransport(options);
+  } catch {
+    log.error("Email alerts unavailable: install backend dependencies and check SMTP configuration. Other features remain available.");
+    return;
+  }
   let running = false;
   const tick = async () => {
     if (running) return;

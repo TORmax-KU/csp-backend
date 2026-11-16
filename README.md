@@ -1,5 +1,44 @@
 # TORmax backend
 
+## Teammate quick start with Docker
+
+Keep `csp-backend` and `TORment-Frontend` beside the root `docker-compose.yaml`.
+If cloning the app repositories separately, obtain the root Compose files too.
+Install Docker Desktop and start its Linux container engine, then run from the root:
+
+```powershell
+if (!(Test-Path csp-backend/.env)) { Copy-Item csp-backend/.env.example csp-backend/.env }
+if (!(Test-Path TORment-Frontend/.env.local)) { Copy-Item TORment-Frontend/.env.example TORment-Frontend/.env.local }
+docker compose up -d --build
+```
+
+Open `http://localhost:3000`; the backend is `http://localhost:5001`.
+The backend example uses `mongodb://mongo:27017/fullstack_db` for the Compose
+MongoDB service. Existing `.env` files are preserved: if yours has an empty URI
+or uses `127.0.0.1`, update it to the Compose URI or your intended remote database.
+Run the base Compose file without the Vertex override for this quick start.
+
+No shared secrets are needed for local email/password registration, login, profile
+editing, and direct job postings. Google login needs your own configured OAuth
+client; email delivery needs SMTP configuration. `SESSION_SECRET` can be blank
+in development (sessions then reset on backend restarts); set your own random
+secret for persistent logins. Real credentials and private `.env` files stay out of Git.
+
+A fresh MongoDB starts without government opportunities. Source ingestion runs,
+but new government TORs require completed Vertex analysis before they appear in
+the public feed. To get those listings, configure your own authorized Vertex
+access or connect to an authorized shared database containing current analyzed
+records. Copying `.env.example` does not copy another person's credentials or data.
+Direct job postings do not require Vertex. Matching/in-app alerts need qualifying
+projects and a saved vendor skill profile.
+
+When pulling changes that add dependencies, refresh the existing Docker dependency
+volume too: `docker compose exec -T backend npm ci`, then
+`docker compose restart backend`. A normal image rebuild can reuse that volume.
+The backend Docker development command enables nodemon polling so source changes
+on Windows bind mounts reload reliably. Rebuild the backend image to pick up a
+changed Dockerfile command.
+
 ## Run with your own MongoDB (no Docker required)
 
 Requires Node.js 22+ and a running MongoDB instance.
@@ -8,11 +47,13 @@ Requires Node.js 22+ and a running MongoDB instance.
 cd csp-backend
 npm ci
 Copy-Item .env.example .env
+# Edit .env: set MONGO_URI=mongodb://127.0.0.1:27017/fullstack_db
 npm run dev
 ```
 
-Copy the example only if you do not already have `.env`. The default connection is
-`mongodb://127.0.0.1:27017/fullstack_db`; change `MONGO_URI` to your own MongoDB URI.
+Copy the example only if you do not already have `.env`. Its URI defaults to the
+Docker service `mongo`; for local Node, change `MONGO_URI` to
+`mongodb://127.0.0.1:27017/fullstack_db` or your own MongoDB URI.
 The backend defaults to port 5001. Browsing does not require Google OAuth or Vertex
 credentials. Google login is unavailable until its credentials are configured;
 email/password sign-up (`POST /auth/register`, `POST /auth/login`) always works.
@@ -35,9 +76,10 @@ local Node or Docker. It runs only while the backend is running. Concurrent tick
 in a single backend process are skipped; use one ingestion-enabled backend per DB.
 
 For the full Docker stack, run `docker compose up -d --build` from the main
-repository root. Its `docker-compose.yaml` is the project's only Compose file: it
-loads `csp-backend/.env`, overrides the Mongo host to `mongo`, and maps backend
-port 5000 to host port 5001.
+repository root. Its base `docker-compose.yaml` loads `csp-backend/.env` unchanged
+for MongoDB and maps backend port 5000 to host port 5001. The optional
+`docker-compose.vertex.yaml` adds the Google credential mount when explicitly
+included with `-f`; it is not needed for the quick start above.
 
 ## Active source imports
 
@@ -183,7 +225,8 @@ the vendor's `minBudget`–`maxBudget` when those are set.
 - A matched TOR moving between open, closed, awarded, cancelled and draft
   creates a `StatusChange` notification. The transient `unknown` state is ignored.
 - Each event notifies once, even across concurrent runs or several backends.
-- Set `MATCHING_ENABLED=false` to stop the sweep. Notifications are in-app only.
+- Set `MATCHING_ENABLED=false` to stop the sweep. Alert channels follow the profile
+  preferences above; email additionally requires SMTP configuration.
 
 ## Vertex AI TOR analysis
 
