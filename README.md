@@ -116,8 +116,48 @@ Signed-in users can flag a government TOR from its detail page
 (`POST /api/projects/:id/classification-report`; one report per user per TOR). Admins
 review them with `GET /api/admin/classification-reports?status=open` and
 `PATCH /api/admin/classification-reports/:id` (`status`: `resolved` or `dismissed`;
-add `markNonSoftware: true` to remove the TOR from the IT feed). The admin console UI
-for both is not built yet.
+add `markNonSoftware: true` to remove the TOR from the IT feed). Admins handle these in
+the frontend admin console at `/admin` ("Misclassified TORs" tab).
+
+## Admin console and moderation (US9, US10, UC5)
+
+**Creating the first admin.** Registration only offers Vendor and Job Lister, so promote
+an account with the script (it also re-activates it and signs out old sessions):
+
+```bash
+node scripts/create-admin.js --email you@example.com
+# or create a new email/password admin; the password comes from the environment:
+ADMIN_PASSWORD='choose-a-strong-one' node scripts/create-admin.js --email you@example.com --create
+# Docker:
+docker compose exec -e ADMIN_PASSWORD='…' -T backend node scripts/create-admin.js --email you@example.com --create
+```
+
+Sign in again, then open **Admin Portal** in the menu (`/admin`).
+
+**Reporting a posting.** Any signed-in user except its publisher can report a direct job
+posting from its page (`POST /api/projects/:id/report`, reasons `spam`, `fraud`, `not-it`,
+`offensive`, `other`; one report per user per posting, repeating updates it). Government
+TORs use misclassification reports instead.
+
+**Removing a posting (FR-14 / NFR-11).** `DELETE /api/admin/posts/:id` with a required
+`{ "reason": "…" }`. Only direct job postings can be removed this way. In order:
+1. the publisher is set to `Disabled` and their sessions are revoked (an Admin publisher
+   is never disabled);
+2. the publisher's other open postings are closed;
+3. a moderation log entry is written, with a copy of the title and publisher email;
+4. the posting is deleted, its open reports are resolved as `removed`, and vendor
+   notifications about it are hidden.
+
+There is no transaction (the Compose MongoDB is a standalone server, which refuses
+them). Each step is safe to repeat, so if a request fails part-way the admin simply
+retries; the account is already disabled by then.
+
+**Other admin endpoints.** `GET /api/admin/posts?status=open|closed|all&search=` (every
+direct posting with its open report count), `GET /api/admin/post-reports?status=open`,
+`PATCH /api/admin/post-reports/:id` (`status`: `resolved`, `dismissed` or `open`),
+`GET /api/users?search=&role=&status=` and `PATCH /api/admin/users/:id/status`
+(admins cannot change their own status or disable another admin), and
+`GET /api/admin/moderation-logs`.
 
 ## Public data rules
 

@@ -39,7 +39,7 @@ test("disabling revokes existing sessions, including untouched sessions after re
   assert.equal((await me(legacy)).status, 200);
   const changeStatus = async status => {
     let code;
-    await setUserStatus({ params: { id: user.id }, body: { status } },
+    await setUserStatus({ params: { id: user.id }, user: { _id: "admin" }, body: { status } },
       { status(value) { code = value; return this; }, json() {} });
     assert.equal(code, 200);
   };
