@@ -161,6 +161,28 @@ direct posting with its open report count), `GET /api/admin/post-reports?status=
 
 ## Public data rules
 
+### Draft TORs (FR-05)
+
+A draft TOR is published for public comment before bidding opens. `status: "Draft"` and
+`procurementStatus: "draft"` always move together.
+
+- **Bangkok e-GP:** the listing API has no status, so drafts are found during enrichment
+  from the project's announcements. A project whose only TOR announcements are drafts
+  (`ร่างขอบเขตของงาน (TOR)`, `ร่างเอกสารประกวดราคา ...`) is a draft. A final invitation
+  (`ประกาศเชิญชวน`) opens it, and a winner or cancellation notice still wins over both.
+  `draftPublishedAt` is the latest draft announcement date. The 5-minute listing scrape
+  never changes `status`.
+- **National sources:** a listing status containing `ร่าง`/`draft` marks a draft; when the
+  listing stops saying so, the project leaves draft.
+- **No AI cost while in draft:** drafts skip Vertex analysis. When a draft becomes public,
+  analysis is switched back on automatically and runs on the final TOR.
+- **Listing:** `GET /api/projects?status=Draft` lists drafts; `status=all` lists open TORs
+  first, then drafts. The default (no `status`) is the open feed, unchanged. A draft is
+  listed while its source has shown it within 2 days, and for at most 90 days after
+  publication (a draft with no invitation by then is most likely abandoned). Drafts have no
+  closing date, so closing-date filters exclude them. Drafts can be opened, bookmarked and
+  reported as misclassified like other TORs.
+
 ### Project alert preferences
 
 Edit Profile, part 5 has four independent switches: matching projects in-app,

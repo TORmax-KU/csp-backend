@@ -135,6 +135,8 @@ const ProjectSchema = new mongoose.Schema({
     },
     announcedAt: Date,
     listingAnnouncedAt: Date,
+    // FR-05: when the draft TOR was published for public comment (drafts expire from the feed).
+    draftPublishedAt: Date,
     procurementStartAt: Date,
     submissionStartAt: Date,
     documentSaleEndAt: Date,

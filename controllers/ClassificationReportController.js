@@ -19,7 +19,7 @@ const reportClassification = async (req, res) => {
 
     const project = await Project.findById(req.params.id).select("status source").lean();
     // Direct postings are publisher-declared, not classified; abuse goes through moderation instead.
-    if (!project || project.status !== "Public" || project.source === DIRECT_SOURCE) return res.status(404).json({ message: "Project not found" });
+    if (!project || !["Public", "Draft"].includes(project.status) || project.source === DIRECT_SOURCE) return res.status(404).json({ message: "Project not found" });
 
     const report = await ClassificationReport.findOneAndUpdate(
       { projectId: req.params.id, userId: req.user._id },
