@@ -33,9 +33,9 @@ jobs:
       TEST_MONGO_URI: mongodb://localhost:27017/csp_ci_test
 
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v5
 
-      - uses: actions/setup-node@v4
+      - uses: actions/setup-node@v5
         with:
           node-version: 22 # matches the Dockerfile (node:22-alpine)
           cache: npm

@@ -33,7 +33,7 @@ test("bookmark routes reject anonymous users and malformed ids before querying d
   }
 });
 
-test("bookmarks are saved per user, newest first, and only for public projects", { skip: !process.env.TEST_MONGO_URI }, async () => {
+test("bookmarks are saved per user, newest first, for public and draft projects", { skip: !process.env.TEST_MONGO_URI }, async () => {
   const dbName = `bookmarks_test_${randomUUID().replaceAll("-", "")}`;
   await mongoose.connect(process.env.TEST_MONGO_URI, { dbName });
   const User = require("../src/models/User");
@@ -56,15 +56,16 @@ test("bookmarks are saved per user, newest first, and only for public projects",
     assert.deepEqual((await (await put(second._id)).json()).ids, [String(second._id), String(first._id)]);
     // Saving twice does not duplicate.
     assert.deepEqual((await (await put(first._id)).json()).ids, [String(second._id), String(first._id)]);
-    assert.equal((await put(draft._id)).status, 404);
+    // FR-05: vendors can follow a draft TOR until its official invitation is published.
+    assert.deepEqual((await (await put(draft._id)).json()).ids, [String(draft._id), String(second._id), String(first._id)]);
     assert.equal((await put(new mongoose.Types.ObjectId())).status, 404);
 
     identity = { _id: other._id };
     assert.deepEqual((await (await fetch(base)).json()).ids, []);
 
     identity = { _id: owner._id };
-    assert.deepEqual((await (await del(second._id)).json()).ids, [String(first._id)]);
-    assert.deepEqual((await (await del(second._id)).json()).ids, [String(first._id)]);
+    assert.deepEqual((await (await del(second._id)).json()).ids, [String(draft._id), String(first._id)]);
+    assert.deepEqual((await (await del(second._id)).json()).ids, [String(draft._id), String(first._id)]);
   } finally {
     await new Promise(resolve => server.close(resolve));
     await mongoose.connection.dropDatabase();
