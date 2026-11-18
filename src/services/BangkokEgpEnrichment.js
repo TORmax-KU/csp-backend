@@ -5,9 +5,11 @@ const {
   fetchAnnouncements,
   fetchTors,
   deriveProcurementStatus,
+  latestDraftDate,
   toTorDocuments,
   verifyPdfUrl,
 } = require("./BangkokEgpDetailClient");
+const { draftFields, leftDraftFields } = require("./DraftState");
 
 const STALE_MS = 24 * 60 * 60 * 1000;
 const MAX_TOR_DOCS = 5;
@@ -35,12 +37,17 @@ const enrichOne = async (project, deps) => {
     }
   }
 
+  const procurementStatus = deriveProcurementStatus(announcements, detail);
   const update = {
-    procurementStatus: deriveProcurementStatus(announcements, detail),
+    procurementStatus,
     sourceVerifiedAt: new Date(),
     dataVerified: documents.length > 0,
     documents,
   };
+  // FR-05: announcements are the only draft evidence for Bangkok (the listing API has none).
+  if (procurementStatus === "draft") Object.assign(update, draftFields(latestDraftDate(announcements)));
+  else update.status = "Public";
+  const leftDraft = project.procurementStatus === "draft" && ["open", "unknown"].includes(procurementStatus);
   const priorUrls = (project.documents || []).map(doc => doc.url).sort();
   const currentUrls = documents.map(doc => doc.url).sort();
   if (project.analysisAutoEligible !== false && documents.length && JSON.stringify(priorUrls) !== JSON.stringify(currentUrls) &&
@@ -49,6 +56,8 @@ const enrichOne = async (project, deps) => {
     update.analysisError = "";
     update.analysisErrorCode = "";
   }
+  // The official invitation is out: analyse the final TOR, which replaces any earlier draft analysis.
+  if (leftDraft) Object.assign(update, leftDraftFields());
   if (detail.procurementMethod) update.procurementMethod = detail.procurementMethod;
   if (detail.sourceStatus) update.sourceStatus = detail.sourceStatus;
   if (detail.referencePrice !== undefined) update.referencePrice = detail.referencePrice;
@@ -71,7 +80,7 @@ const enrichBangkokProjects = async ({
     .find(needsEnrichment(now))
     .sort({ createdAt: -1 })
     .limit(batchSize)
-    .select("_id externalId documents analysisStatus analysisAutoEligible");
+    .select("_id externalId documents analysisStatus analysisAutoEligible procurementStatus");
 
   const counters = { enriched: 0, failed: 0 };
   for (const project of candidates) {

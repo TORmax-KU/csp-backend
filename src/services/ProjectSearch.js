@@ -1,6 +1,6 @@
 const literalRegex = value => ({ $regex: value.replace(/[.*+?^${}()|[\]\\]/g, "\\$&"), $options: "i" });
 
-const { listedProjectQuery } = require("./ProcurementAvailability");
+const { listedProjectQuery, draftProjectQuery } = require("./ProcurementAvailability");
 
 async function buildProjectQuery(params, findSkillIds, now = new Date()) {
   const invalid = message => { throw Object.assign(new Error(message), { status: 400 }); };
@@ -12,12 +12,19 @@ async function buildProjectQuery(params, findSkillIds, now = new Date()) {
   if (!Number.isSafeInteger(page) || page < 1 || !Number.isSafeInteger(limit) || limit < 1 || limit > 100 || !Number.isSafeInteger((page - 1) * limit)) {
     invalid("Page must be a positive integer and limit must be between 1 and 100");
   }
+  // FR-05 / UC3: "Public" (default) is the open feed, "Draft" lists draft TORs, "all" both.
+  const status = params.status || "Public";
+  if (!["Public", "Draft", "all"].includes(status)) invalid("Status must be Public, Draft or all");
   if (params.availability && params.availability !== "open") invalid("Only open, fully analyzed TORs are searchable");
-  if (params.status && params.status !== "Public") invalid("Only public projects are searchable");
+  if (params.availability && status !== "Public") invalid("Draft TORs are not open for bids; omit availability");
   if (params.sort && !["deadline", "newest", "budget"].includes(params.sort)) invalid("Invalid sort");
-  // Eligibility lives inside $and so text search ($or) and filters apply to both
-  // verified government e-bidding TORs and open direct postings.
-  const query = { $and: [listedProjectQuery(now, { governmentFilter: { procurementMethod: { $regex: "e-bidding", $options: "i" } } })] };
+  // Eligibility lives inside $and so text search ($or) and filters apply to every branch:
+  // verified government e-bidding TORs, open direct postings and, when requested, drafts.
+  const listed = listedProjectQuery(now, { governmentFilter: { procurementMethod: { $regex: "e-bidding", $options: "i" } } });
+  const eligibility = status === "Draft" ? draftProjectQuery(now)
+    : status === "all" ? { $or: [...listed.$or, draftProjectQuery(now)] }
+    : listed;
+  const query = { $and: [eligibility] };
   const search = (params.search || "").trim();
   if (search.length > 300) invalid("Search must be 300 characters or fewer");
   if (search) {
@@ -40,7 +47,6 @@ async function buildProjectQuery(params, findSkillIds, now = new Date()) {
   }
   if (params.agency?.trim()) query.agency = literalRegex(params.agency.trim());
   if (params.method?.trim()) query.$and.push({ procurementMethod: literalRegex(params.method.trim()) });
-  if (params.status) query.status = params.status;
   if (params.priceFlag) {
     if (!["Normal", "Underpriced", "Overpriced", "ScopeMismatch"].includes(params.priceFlag)) invalid("Invalid priceFlag");
     query.priceFlag = params.priceFlag;
@@ -83,7 +89,17 @@ async function buildProjectQuery(params, findSkillIds, now = new Date()) {
   if (Object.keys(bounds).length) {
     query.deadline = { ...query.deadline, ...bounds };
   }
-  return { query, page, limit };
+  return { query, page, limit, status };
 }
 
-module.exports = { buildProjectQuery };
+// Drafts have no closing deadline yet (null sorts first ascending in MongoDB), so a draft-only
+// list is ordered by draft publication, and a mixed list puts open TORs ("Public") first.
+function projectSort(sort, status = "Public") {
+  if (sort === "budget") return { budget: -1, _id: -1 };
+  if (sort === "newest") return { announcedAt: -1, draftPublishedAt: -1, _id: -1 };
+  if (status === "Draft") return { draftPublishedAt: -1, createdAt: -1, _id: -1 };
+  if (status === "all") return { status: -1, deadline: 1, draftPublishedAt: -1, _id: 1 };
+  return { deadline: 1, _id: 1 };
+}
+
+module.exports = { buildProjectQuery, projectSort };

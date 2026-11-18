@@ -1,5 +1,5 @@
 const { attachmentUrl, checkedUrl } = require("./TorSource");
-const { announcementLabel, announcementPriority, detailTerminalStatus, CANCEL_PATTERN, AWARD_PATTERN, TOR_PATTERN } = require("./BangkokEgpDocumentMetadata");
+const { announcementLabel, announcementPriority, detailTerminalStatus, CANCEL_PATTERN, AWARD_PATTERN, TOR_PATTERN, DRAFT_PATTERN } = require("./BangkokEgpDocumentMetadata");
 
 const ORIGIN = "https://egp2.bangkok.go.th";
 const API_BASE = `${ORIGIN}/appapi/api`;
@@ -68,8 +68,20 @@ const deriveProcurementStatus = (announcements, detail = {}) => {
     (a) => CANCEL_PATTERN.test(a.type) || AWARD_PATTERN.test(a.type)
   );
   if (latestTerminal) return CANCEL_PATTERN.test(latestTerminal.type) ? "cancelled" : "awarded";
-  if (announcements.some((a) => TOR_PATTERN.test(a.type))) return "open";
+  // FR-05: only a final (non-draft) invitation or TOR opens bidding. Draft TORs also match
+  // TOR_PATTERN ("ร่างขอบเขตของงาน"), so a project with only drafts is still in public comment.
+  if (announcements.some((a) => TOR_PATTERN.test(a.type) && !DRAFT_PATTERN.test(a.type))) return "open";
+  if (announcements.some((a) => DRAFT_PATTERN.test(a.type))) return "draft";
   return "unknown";
+};
+
+// When the draft was published: the latest draft announcement, for ordering and expiry.
+const latestDraftDate = (announcements) => {
+  const dates = announcements
+    .filter((a) => DRAFT_PATTERN.test(a.type) && a.publishDate)
+    .map((a) => new Date(a.publishDate))
+    .filter((date) => !Number.isNaN(date.getTime()));
+  return dates.length ? new Date(Math.max(...dates)) : null;
 };
 
 // Terminal announcements are status evidence, not TOR documents
@@ -107,6 +119,7 @@ module.exports = {
   fetchAnnouncements,
   fetchTors,
   deriveProcurementStatus,
+  latestDraftDate,
   toTorDocuments,
   verifyPdfUrl,
 };

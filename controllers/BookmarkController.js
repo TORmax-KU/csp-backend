@@ -24,9 +24,10 @@ const add = async (req, res) => {
     const { projectId } = req.params;
     if (!isObjectId(projectId)) return res.status(404).json({ message: "Project not found" });
 
-    // Only public projects can be bookmarked, matching what GET /api/projects/:id exposes.
+    // Only what GET /api/projects/:id exposes can be bookmarked: public TORs and drafts (FR-05),
+    // so vendors can follow a draft until its official invitation is published.
     const project = await Project.findById(projectId).select("status").lean();
-    if (!project || project.status !== "Public") return res.status(404).json({ message: "Project not found" });
+    if (!project || !["Public", "Draft"].includes(project.status)) return res.status(404).json({ message: "Project not found" });
 
     // Atomic and idempotent: skip if already saved or the list is full.
     const result = await User.updateOne(

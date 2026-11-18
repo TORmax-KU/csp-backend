@@ -1,6 +1,6 @@
 const Project = require("../src/models/Project");
 const Skill = require("../src/models/Skill");
-const { buildProjectQuery } = require("../src/services/ProjectSearch");
+const { buildProjectQuery, projectSort } = require("../src/services/ProjectSearch");
 const { availability, DIRECT_SOURCE } = require("../src/services/ProcurementAvailability");
 const { ingestionStatus } = require("../src/services/IngestionScheduler");
 const { pendingTorExtraction } = require("../src/services/PendingTorExtraction");
@@ -26,7 +26,7 @@ const validationFailed = (res, errors) => res.status(400).json({ message: "Pleas
 
 const fetch = async (req, res) => {
   try {
-    const { query, page, limit } = await buildProjectQuery(req.query, async regex =>
+    const { query, page, limit, status } = await buildProjectQuery(req.query, async regex =>
       (await Skill.find({ name: regex }).select("_id").lean()).map(skill => skill._id));
 
     const [projects, total] = await Promise.all([
@@ -34,7 +34,7 @@ const fetch = async (req, res) => {
         .populate("requiredSkills", "name category")
         .populate("publisherId", PUBLISHER_FIELDS)
         .select("-rawData -analysisError -analysisLease")
-        .sort(req.query.sort === "newest" ? { announcedAt: -1, _id: -1 } : req.query.sort === "budget" ? { budget: -1, _id: -1 } : { deadline: 1, _id: 1 })
+        .sort(projectSort(req.query.sort, status))
         .skip((page - 1) * Number(limit))
         .limit(Number(limit)),
       Project.countDocuments(query),
@@ -57,7 +57,8 @@ const fetchById = async (req, res) => {
       .populate("requiredSkills", "name category")
       .populate("publisherId", PUBLISHER_FIELDS);
 
-    if (!project || project.status !== "Public") return res.status(404).json({ message: "Project not found" });
+    // FR-05 / 3.1.2: draft TORs have a detail page too, labelled as drafts.
+    if (!project || !["Public", "Draft"].includes(project.status)) return res.status(404).json({ message: "Project not found" });
 
     res.set("Cache-Control", "no-store");
     res.status(200).json({ ...project.toObject(), availability: availability(project) });

@@ -34,7 +34,6 @@ test("reports need a valid reason, a note for 'other', and a public government T
   assert.equal(await send({ reason: "other", note: " " }), 400);
   assert.equal(await send({ reason: "not-it", note: "x".repeat(501) }), 400);
   assert.equal(await send({ reason: "not-it" }, null), 404);
-  assert.equal(await send({ reason: "not-it" }, { status: "Draft", source: "bangkok-egp" }), 404);
   assert.equal(await send({ reason: "not-it" }, { status: "Public", source: "direct" }), 404);
   assert.equal(await send({ reason: "not-it" }, undefined, "bad-id"), 404);
 });

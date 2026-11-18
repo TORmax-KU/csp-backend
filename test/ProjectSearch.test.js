@@ -58,7 +58,7 @@ test('Buddhist closing-year filter uses Bangkok year boundaries and cannot revea
 });
 
 test('search rejects unknown or expired availability and malformed filters', async () => {
-  for (const params of [{ status: 'Draft' }, { availability: 'all' }, { availability: 'unknown' }, { availability: 'closed' }, { sort: 'bad' }, { deadlineYear: 'NaN' }, { deadlineFrom: '2026-02-30' }, { deadlineFrom: '2026-10-08', deadlineTo: '2026-10-07' }, { priceFlag: 'Weird' }, { origin: 'elsewhere' }]) await assert.rejects(buildProjectQuery(params, async () => []), { status: 400 });
+  for (const params of [{ status: 'Hidden' }, { status: 'Draft', availability: 'open' }, { status: 'all', availability: 'open' }, { availability: 'all' }, { availability: 'unknown' }, { availability: 'closed' }, { sort: 'bad' }, { deadlineYear: 'NaN' }, { deadlineFrom: '2026-02-30' }, { deadlineFrom: '2026-10-08', deadlineTo: '2026-10-07' }, { priceFlag: 'Weird' }, { origin: 'elsewhere' }]) await assert.rejects(buildProjectQuery(params, async () => []), { status: 400 });
 });
 
 test('agency and budget filters combine, including a zero budget', async () => {

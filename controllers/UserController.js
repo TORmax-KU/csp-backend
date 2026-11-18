@@ -37,22 +37,35 @@ const MATCHING_FIELDS = ["skillNames", "minBudget", "maxBudget", "matchThreshold
 
 const fetch = async (req, res) => {
   try {
-    const { search, page = 1, limit = 10 } = req.query;
+    const page = Number(req.query.page ?? 1);
+    const limit = Number(req.query.limit ?? 10);
+    if (!Number.isSafeInteger(page) || page < 1 || !Number.isSafeInteger(limit) || limit < 1 || limit > 100) {
+      return res.status(400).json({ error: "Page must be a positive integer and limit between 1 and 100" });
+    }
+    const { role, status } = req.query;
+    if (role !== undefined && !["Vendor", "JobLister", "Admin"].includes(role)) return res.status(400).json({ error: "Invalid role" });
+    if (status !== undefined && !["Active", "Disabled"].includes(status)) return res.status(400).json({ error: "Invalid status" });
+    const search = typeof req.query.search === "string" ? req.query.search.trim().slice(0, 200) : "";
 
-    let query = {};
+    const query = {};
+    if (role) query.role = role;
+    if (status) query.status = status;
     if (search) {
-      const regex = { $regex: search, $options: "i" };
-      query = { $or: [{ username: regex }, { realName: regex }, { email: regex }] };
+      // Literal match: admin input is never interpreted as a regular expression.
+      const regex = { $regex: search.replace(/[.*+?^${}()|[\]\\]/g, "\\$&"), $options: "i" };
+      query.$or = [{ username: regex }, { realName: regex }, { email: regex }, { companyName: regex }];
     }
 
     const [users, total] = await Promise.all([
       User.find(query)
-        .skip((page - 1) * Number(limit))
-        .limit(Number(limit)),
+        .select("email realName username companyName role status createdAt")
+        .sort({ createdAt: -1, _id: -1 })
+        .skip((page - 1) * limit)
+        .limit(limit),
       User.countDocuments(query),
     ]);
 
-    res.status(200).json({ users, total });
+    res.status(200).json({ users, total, page, limit });
   } catch (error) {
     console.error("Fetch users error:", error);
     res.status(500).json({ error: "Server error while fetching users" });

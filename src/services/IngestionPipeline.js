@@ -5,6 +5,11 @@ const {
   FILTER_VERSION,
   classifySoftware,
 } = require("./SoftwareKeywordClassifier");
+const { DRAFT_SKIP_REASON, draftFields, leftDraftFields } = require("./DraftState");
+
+const BANGKOK_SOURCE = "bangkok-egp";
+// The listing's own publication date when it has one; otherwise when TORmax first saw the draft.
+const draftDate = (project) => project.listingAnnouncedAt || new Date();
 
 const normalizeStatus = (record) => {
   const value = String(record.status || record.sourceStatus || "")
@@ -86,17 +91,17 @@ const ingestRecords = async ({
       const existing = await Project.findOne(project.nationalProjectId
         ? { $or: [{ nationalProjectId: project.nationalProjectId }, { source: project.source, externalId: project.externalId }] }
         : { source: project.source, externalId: project.externalId })
-        .select("_id source sourceUrl rawData analysisHold procurementStatus analysisAutoEligible analysisSkipReason");
+        .select("_id source sourceUrl rawData analysisHold procurementStatus analysisAutoEligible analysisSkipReason draftPublishedAt");
 
       if (existing) {
-        // Budget/dates are owned by PDF extraction, never by listing scrapers.
-        const { publisherId, budget, deadline, procurementStatus, documents, dataVerified, sourceVerifiedAt, ...updateFields } = project;
+        // Budget/dates are owned by PDF extraction, never by listing scrapers. Draft status is set
+        // below from explicit evidence only, so a listing without status never undoes a draft.
+        const { publisherId, budget, deadline, procurementStatus, documents, dataVerified, sourceVerifiedAt, status, ...updateFields } = project;
         if (project.nationalProjectId) {
           updateFields.source = existing.source;
           updateFields.rawData = { ...existing.rawData, ...project.rawData };
         }
         const terminal = nationalTerminalStatus(updateFields.rawData, project.sourceStatus);
-        if (terminal) Object.assign(updateFields, { procurementStatus: terminal });
         // Listing freshness alone cannot verify document bytes. A recently verified
         // completed analysis is renewed by the dedicated document refresh below.
         if (existing.sourceUrl !== project.sourceUrl) {
@@ -108,14 +113,26 @@ const ingestRecords = async ({
             analysisLease: null, analysisLeaseUntil: null, analyzedAt: null,
             dataVerified: false, documents: [], sourceVerifiedAt: null, procurementStatus: "unknown" });
         }
+        // FR-05: explicit draft or terminal evidence from the listing wins.
+        if (status === "Draft" || terminal === "draft") {
+          Object.assign(updateFields, draftFields(existing.draftPublishedAt ? undefined : draftDate(project)));
+        } else if (terminal) {
+          Object.assign(updateFields, { procurementStatus: terminal, status: "Public" });
+        } else if (existing.procurementStatus === "draft" && project.source !== BANGKOK_SOURCE) {
+          // The listing no longer says draft. (Bangkok's listing carries no status at all;
+          // its drafts are resolved from announcements during enrichment instead.)
+          Object.assign(updateFields, { procurementStatus: "unknown" }, leftDraftFields());
+        }
         await Project.findByIdAndUpdate(existing._id, {
           $set: updateFields,
         }, { runValidators: true });
         counters.projectsUpdated += 1;
       } else {
         const terminal = nationalTerminalStatus(project.rawData, project.sourceStatus);
+        const draft = project.status === "Draft" || terminal === "draft";
         await Project.create({ ...project, ...pendingTorExtraction(), analysisHold: false, procurementStatus: terminal || "unknown",
-          ...(terminal ? { analysisStatus: 'skipped', analysisAutoEligible: false, analysisSkipReason: `Source is ${terminal}` } : {}) });
+          ...(terminal ? { analysisStatus: 'skipped', analysisAutoEligible: false, analysisSkipReason: `Source is ${terminal}` } : {}),
+          ...(draft ? { ...draftFields(draftDate(project)), analysisStatus: 'skipped', analysisAutoEligible: false, analysisSkipReason: DRAFT_SKIP_REASON } : {}) });
         counters.projectsCreated += 1;
       }
     } catch (error) {

@@ -64,10 +64,30 @@ function directPostingQuery(now = new Date()) {
   };
 }
 
+// FR-05 / UC3: draft government TORs, published for public comment before bidding opens.
+// They are listed from source metadata (no AI analysis yet), so the rules are lighter than the
+// open feed: still listed by the source within 2 days, and published within 90 days. A draft
+// that has not become an invitation after 90 days is most likely abandoned.
+const DRAFT_SEEN_MS = 2 * 24 * 60 * 60 * 1000;
+const DRAFT_MAX_AGE_MS = 90 * 24 * 60 * 60 * 1000;
+
+function draftProjectQuery(now = new Date()) {
+  const oldest = new Date(now.getTime() - DRAFT_MAX_AGE_MS);
+  const seen = new Date(now.getTime() - DRAFT_SEEN_MS);
+  return {
+    status: "Draft", procurementStatus: "draft", classification: "software",
+    source: { $in: ALLOWED_SOURCES }, title: { $regex: "\\S" },
+    $and: [
+      { $or: [{ sourceVerifiedAt: { $gte: seen } }, { lastScrapedAt: { $gte: seen } }] },
+      { $or: [{ draftPublishedAt: { $gte: oldest } }, { draftPublishedAt: null, createdAt: { $gte: oldest } }] },
+    ],
+  };
+}
+
 // Everything vendors can see: verified open government TORs plus open direct postings.
 // governmentFilter narrows only the government branch (e.g. the e-bidding method).
 function listedProjectQuery(now = new Date(), { governmentFilter = {} } = {}) {
   return { $or: [{ ...publicProjectQuery(now), ...governmentFilter }, directPostingQuery(now)] };
 }
 
-module.exports = { availability, publicProjectQuery, directPostingQuery, listedProjectQuery, MAX_AGE_MS, ALLOWED_SOURCES, DIRECT_SOURCE };
+module.exports = { availability, publicProjectQuery, directPostingQuery, listedProjectQuery, draftProjectQuery, MAX_AGE_MS, DRAFT_MAX_AGE_MS, ALLOWED_SOURCES, DIRECT_SOURCE };
