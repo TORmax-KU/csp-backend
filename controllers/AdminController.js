@@ -160,11 +160,15 @@ const INGESTION_LOG_STATUSES = ["Success", "Failed"];
 const fetchIngestionLogs = async (req, res) => {
   try {
     const { status, page = 1, limit = 20 } = req.query;
-    if (status !== undefined && !INGESTION_LOG_STATUSES.includes(status)) {
+    if (status !== undefined && (typeof status !== "string" || !INGESTION_LOG_STATUSES.includes(status))) {
       return res.status(400).json({ error: "Invalid status" });
     }
 
-    const query = status ? { status } : {};
+    // Rebuild the filter from a hardcoded literal, never the request value itself,
+    // so no user-controlled data can reach the Mongoose query (ASVS V1.2.4).
+    const query = {};
+    if (status === "Success") query.status = "Success";
+    else if (status === "Failed") query.status = "Failed";
 
     const [logs, total] = await Promise.all([
       IngestionLog.find(query)
