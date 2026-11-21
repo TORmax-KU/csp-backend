@@ -113,7 +113,7 @@ const parseRow = (row) => {
     const parts = row.date.split("/").map(Number);
     if (parts.length === 3) {
       const [d, m, y] = parts;
-      if (!isNaN(d) && !isNaN(m) && !isNaN(y)) {
+      if (!Number.isNaN(d) && !Number.isNaN(m) && !Number.isNaN(y)) {
         deadline = `${y}-${String(m).padStart(2, "0")}-${String(d).padStart(2, "0")}`;
       }
     }

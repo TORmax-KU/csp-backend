@@ -24,7 +24,7 @@ const toProjectDocument = (record, source, sourceUrl, classification) => {
   const finalSourceUrl = record.sourceUrl || sourceUrl;
   const now = new Date();
   const deadlineDate = record.deadline ? new Date(record.deadline) : null;
-  const isFutureDeadline = deadlineDate && !isNaN(deadlineDate.getTime()) && deadlineDate > now;
+  const isFutureDeadline = deadlineDate && !Number.isNaN(deadlineDate.getTime()) && deadlineDate > now;
   const procurementStatus = isFutureDeadline ? "open" : (deadlineDate ? "closed" : "unknown");
 
   // A project detail page is a source link, not a verified TOR document.

@@ -4,6 +4,12 @@ const { loadTor } = require('../src/services/TorSource');
 
 (async () => {
   const base = process.argv[2] || 'http://host.docker.internal:4910/bangkok';
+  // Only ever point this at the local simulation server (SSRF guard): restrict the
+  // argument to loopback/docker-internal hosts rather than trusting it outright.
+  const baseHost = new URL(base).hostname;
+  if (!['localhost', '127.0.0.1', 'host.docker.internal'].includes(baseHost)) {
+    throw new Error('Simulation base URL must point at localhost, 127.0.0.1 or host.docker.internal');
+  }
   // Keep the production logical URL/validation and forward its transport to
   // the local simulation; no request reaches a real procurement or AI service.
   const fetchImpl = (url, options) => {

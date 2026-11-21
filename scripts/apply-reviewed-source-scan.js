@@ -9,7 +9,10 @@ const { checkedUrl } = require('../src/services/TorSource');
 async function main() {
   const input = process.argv[2];
   if (!input) throw new Error('Supply the reviewed snapshot path; add --apply after preview');
-  const review = JSON.parse(fs.readFileSync(input, 'utf8').replace(/^\uFEFF/, ''));
+  // Resolve relative to the project root and refuse anything that escapes it (path traversal).
+  const resolved = path.resolve(process.cwd(), input);
+  if (!resolved.startsWith(process.cwd() + path.sep)) throw new Error('Snapshot path must stay within the project directory');
+  const review = JSON.parse(fs.readFileSync(resolved, 'utf8').replace(/^\uFEFF/, ''));
   if (review.version !== 1 || !Array.isArray(review.entries)) throw new Error('Invalid review snapshot');
   const apply = process.argv.includes('--apply');
   await mongoose.connect(process.env.MONGO_URI);

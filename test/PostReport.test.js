@@ -2,7 +2,7 @@ const test = require("node:test");
 const assert = require("node:assert/strict");
 const Project = require("../src/models/Project");
 const PostReport = require("../src/models/PostReport");
-const { reportPost, reviewPostReport } = require("../controllers/PostReportController");
+const { reportPost, reviewPostReport, fetchPostReports } = require("../controllers/PostReportController");
 
 const ID = "6ae0b63ffb773330336475e6";
 const response = () => ({ status(code) { this.statusCode = code; return this; }, json(body) { this.body = body; return this; } });
@@ -59,4 +59,26 @@ test("an admin can dismiss a report, but cannot reopen one whose posting was rem
   const invalid = response();
   await reviewPostReport({ params: { id: ID }, user: { _id: "admin" }, body: { status: "deleted" } }, invalid);
   assert.equal(invalid.statusCode, 400);
+});
+
+test("admin queue rejects a status outside the PostReport enum, including an injection attempt", async t => {
+  const res1 = response();
+  await fetchPostReports({ query: { status: "deleted" } }, res1);
+  assert.equal(res1.statusCode, 400);
+
+  const res2 = response();
+  await fetchPostReports({ query: { status: { $ne: "open" } } }, res2);
+  assert.equal(res2.statusCode, 400);
+});
+
+test("admin queue lists open reports by default, newest first", async t => {
+  const rows = [{ _id: "r1", status: "open" }];
+  const chain = { populate: () => chain, sort: () => chain, skip: () => chain, limit: () => chain, lean: async () => rows };
+  t.mock.method(PostReport, "find", () => chain);
+  t.mock.method(PostReport, "countDocuments", async () => 1);
+  const res = response();
+  res.set = () => {};
+  await fetchPostReports({ query: {} }, res);
+  assert.equal(res.statusCode, 200);
+  assert.deepEqual(res.body, { reports: rows, total: 1, page: 1, limit: 20 });
 });

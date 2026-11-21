@@ -155,9 +155,14 @@ const fetchModerationLogs = async (req, res) => {
 };
 
 // Use Case 6: monitor ingestion pipeline health
+const INGESTION_LOG_STATUSES = ["Success", "Failed"];
+
 const fetchIngestionLogs = async (req, res) => {
   try {
     const { status, page = 1, limit = 20 } = req.query;
+    if (status !== undefined && !INGESTION_LOG_STATUSES.includes(status)) {
+      return res.status(400).json({ error: "Invalid status" });
+    }
 
     const query = status ? { status } : {};
 

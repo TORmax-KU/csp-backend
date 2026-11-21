@@ -3,3 +3,4 @@ node_modules
 *credentials*.json
 *service-account*.json
 tmp/
+coverage.lcov

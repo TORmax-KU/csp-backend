@@ -5,6 +5,7 @@ const { parseSkillNames } = require("./SkillCatalog");
 
 const MAX_POSTING_SKILLS = 30;
 const MAX_DEADLINE_MS = 2 * 365 * 24 * 60 * 60 * 1000;
+const MAX_EMAIL_LENGTH = 254; // RFC 5321; also bounds input to the regex to avoid ReDoS
 const EMAIL = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
 const PHONE = /^[0-9+\-() ]{6,30}$/;
 
@@ -19,9 +20,9 @@ function httpsUrl(value) {
 
 function money(value) {
   if (value === null || value === "" || value === undefined) return null;
-  if (!["number", "string"].includes(typeof value)) return NaN;
+  if (!["number", "string"].includes(typeof value)) return Number.NaN;
   const number = typeof value === "number" ? value : Number(value);
-  return Number.isFinite(number) ? number : NaN;
+  return Number.isFinite(number) ? number : Number.NaN;
 }
 
 // Validates a complete posting. On update, pass the stored posting as `existing`: submitted fields are
@@ -87,7 +88,7 @@ function validatePosting(input, { existing = null, now = new Date() } = {}) {
   value.contact = { name: contactText("name"), email: contactText("email").toLowerCase(), phone: contactText("phone") };
   if (!value.contact.name) errors["contact.name"] = "Enter a contact name";
   else if (value.contact.name.length > 100) errors["contact.name"] = "Contact name must be 100 characters or fewer";
-  if (value.contact.email && (!EMAIL.test(value.contact.email) || value.contact.email.length > 200)) errors["contact.email"] = "Enter a valid email address";
+  if (value.contact.email && (value.contact.email.length > Math.min(200, MAX_EMAIL_LENGTH) || !EMAIL.test(value.contact.email))) errors["contact.email"] = "Enter a valid email address";
   if (value.contact.phone && !PHONE.test(value.contact.phone)) errors["contact.phone"] = "Enter a valid phone number";
   if (!value.contact.email && !value.contact.phone) errors["contact.email"] ||= "Give an email or phone number so vendors can reach you";
 
