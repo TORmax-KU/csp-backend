@@ -35,3 +35,15 @@ test("admin user list filters by role and status", async t => {
   assert.equal(res.statusCode, 200);
   assert.deepEqual(res.body, { users: rows, total: 1, page: 1, limit: 10 });
 });
+
+test("admin user list also filters by JobLister/Admin role and Disabled status", async t => {
+  let usedQuery;
+  t.mock.method(User, "find", (query) => { usedQuery = query; return chain([]); });
+  t.mock.method(User, "countDocuments", async () => 0);
+
+  await fetch({ query: { role: "JobLister" } }, response());
+  assert.deepEqual(usedQuery, { role: "JobLister" });
+
+  await fetch({ query: { role: "Admin", status: "Disabled" } }, response());
+  assert.deepEqual(usedQuery, { role: "Admin", status: "Disabled" });
+});

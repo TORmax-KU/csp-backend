@@ -82,3 +82,17 @@ test("admin queue lists open reports by default, newest first", async t => {
   assert.equal(res.statusCode, 200);
   assert.deepEqual(res.body, { reports: rows, total: 1, page: 1, limit: 20 });
 });
+
+test("admin queue also filters by resolved or dismissed status", async t => {
+  const chain = { populate: () => chain, sort: () => chain, skip: () => chain, limit: () => chain, lean: async () => [] };
+  let usedQuery;
+  t.mock.method(PostReport, "find", (query) => { usedQuery = query; return chain; });
+  t.mock.method(PostReport, "countDocuments", async () => 0);
+  const res = () => { const r = response(); r.set = () => {}; return r; };
+
+  await fetchPostReports({ query: { status: "resolved" } }, res());
+  assert.deepEqual(usedQuery, { status: "resolved" });
+
+  await fetchPostReports({ query: { status: "dismissed" } }, res());
+  assert.deepEqual(usedQuery, { status: "dismissed" });
+});

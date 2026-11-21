@@ -47,9 +47,14 @@ const fetch = async (req, res) => {
     if (status !== undefined && (typeof status !== "string" || !["Active", "Disabled"].includes(status))) return res.status(400).json({ error: "Invalid status" });
     const search = typeof req.query.search === "string" ? req.query.search.trim().slice(0, 200) : "";
 
+    // Rebuild the filter from hardcoded literals, never the request values themselves,
+    // so no user-controlled data can reach the Mongoose query (ASVS V1.2.4).
     const query = {};
-    if (role) query.role = role;
-    if (status) query.status = status;
+    if (role === "Vendor") query.role = "Vendor";
+    else if (role === "JobLister") query.role = "JobLister";
+    else if (role === "Admin") query.role = "Admin";
+    if (status === "Active") query.status = "Active";
+    else if (status === "Disabled") query.status = "Disabled";
     if (search) {
       // Literal match: admin input is never interpreted as a regular expression.
       const regex = { $regex: search.replace(/[.*+?^${}()|[\]\\]/g, "\\$&"), $options: "i" };
