@@ -18,10 +18,10 @@ function publicationDate(value) {
     const months = ['มค', 'กพ', 'มีค', 'เมย', 'พค', 'มิย', 'กค', 'สค', 'กย', 'ตค', 'พย', 'ธค'];
     const month = months.indexOf(match[2].replace(/\./g, '')) + 1;
     let year = Number(match[3]); if (year < 100) year += 2500; if (year > 2400) year -= 543;
-    if (!month) return new Date(NaN);
+    if (!month) return new Date(Number.NaN);
     const iso = `${year}-${String(month).padStart(2, '0')}-${match[1].padStart(2, '0')}`;
     const result = new Date(`${iso}T00:00:00+07:00`);
-    if (new Date(result.getTime() + 7 * 3600000).toISOString().slice(0, 10) !== iso) return new Date(NaN);
+    if (new Date(result.getTime() + 7 * 3600000).toISOString().slice(0, 10) !== iso) return new Date(Number.NaN);
     return result;
   }
   return new Date(/^\d{4}-\d{2}-\d{2}$/.test(text) ? `${text}T00:00:00+07:00` : text);

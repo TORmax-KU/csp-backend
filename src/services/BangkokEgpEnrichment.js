@@ -48,8 +48,8 @@ const enrichOne = async (project, deps) => {
   if (procurementStatus === "draft") Object.assign(update, draftFields(latestDraftDate(announcements)));
   else update.status = "Public";
   const leftDraft = project.procurementStatus === "draft" && ["open", "unknown"].includes(procurementStatus);
-  const priorUrls = (project.documents || []).map(doc => doc.url).sort();
-  const currentUrls = documents.map(doc => doc.url).sort();
+  const priorUrls = (project.documents || []).map(doc => doc.url).sort((a, b) => a.localeCompare(b));
+  const currentUrls = documents.map(doc => doc.url).sort((a, b) => a.localeCompare(b));
   if (project.analysisAutoEligible !== false && documents.length && JSON.stringify(priorUrls) !== JSON.stringify(currentUrls) &&
     ["awaiting_documents", "failed"].includes(project.analysisStatus)) {
     update.analysisStatus = "pending";
