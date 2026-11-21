@@ -43,8 +43,8 @@ const fetch = async (req, res) => {
       return res.status(400).json({ error: "Page must be a positive integer and limit between 1 and 100" });
     }
     const { role, status } = req.query;
-    if (role !== undefined && !["Vendor", "JobLister", "Admin"].includes(role)) return res.status(400).json({ error: "Invalid role" });
-    if (status !== undefined && !["Active", "Disabled"].includes(status)) return res.status(400).json({ error: "Invalid status" });
+    if (role !== undefined && (typeof role !== "string" || !["Vendor", "JobLister", "Admin"].includes(role))) return res.status(400).json({ error: "Invalid role" });
+    if (status !== undefined && (typeof status !== "string" || !["Active", "Disabled"].includes(status))) return res.status(400).json({ error: "Invalid status" });
     const search = typeof req.query.search === "string" ? req.query.search.trim().slice(0, 200) : "";
 
     const query = {};

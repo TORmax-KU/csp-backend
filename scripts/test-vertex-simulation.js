@@ -1,12 +1,17 @@
 const assert = require("node:assert/strict");
 const fs = require("node:fs");
+const path = require("node:path");
 const { analyzeTor } = require("../src/services/VertexTorAnalyzer");
 const { classifyAnalysisError } = require("../src/services/AnalysisErrors");
 process.env.GOOGLE_CLOUD_PROJECT = "test-project";
 process.env.VERTEX_MODEL = "test-model";
 process.env.GOOGLE_CLOUD_LOCATION = "global";
 const baseUrl = process.env.VERTEX_SIMULATION_URL || "http://host.docker.internal:4900/vertex";
-const documents = [{ url: "fixture.pdf", bytes: fs.readFileSync(process.argv[2] || "tmp/pdfs/pbis-0.pdf") }];
+// Resolve relative to the project root and refuse anything that escapes it (path traversal).
+const pdfArg = process.argv[2] || "tmp/pdfs/pbis-0.pdf";
+const pdfPath = path.resolve(process.cwd(), pdfArg);
+if (!pdfPath.startsWith(process.cwd() + path.sep)) throw new Error("PDF path must stay within the project directory");
+const documents = [{ url: "fixture.pdf", bytes: fs.readFileSync(pdfPath) }];
 delete process.env.GOOGLE_API_KEY;
 delete process.env.GEMINI_API_KEY;
 const { OAuth2Client } = require("google-auth-library");

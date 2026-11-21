@@ -42,7 +42,7 @@ jobs:
           node-version: 22 # matches the Dockerfile (node:22-alpine)
           cache: npm
 
-      - run: npm ci
+      - run: npm ci --ignore-scripts
 
       - run: npm test
 

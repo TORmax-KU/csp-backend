@@ -55,7 +55,9 @@ const parseRows = (html) => {
   for (const trMatch of trMatches) {
     const tr = trMatch[1];
     // Extract all <td> cell contents (strip inner HTML tags)
-    const cells = [...tr.matchAll(/<td[^>]*>([\s\S]*?)<\/td>/gi)].map((m) =>
+    // Cell/attribute spans are bounded to keep worst-case backtracking linear (ReDoS guard)
+    // against scraped, not-fully-trusted government portal markup.
+    const cells = [...tr.matchAll(/<td[^>]{0,200}>([\s\S]{0,5000}?)<\/td>/gi)].map((m) =>
       m[1].replace(/<[^>]+>/g, " ").replace(/\s+/g, " ").trim()
     );
 
@@ -64,12 +66,12 @@ const parseRows = (html) => {
     const [externalId, agency, method, type, rawTitle] = cells;
 
     // Extract href for detail page link (project_id)
-    const hrefMatch = tr.match(/href=["']([^"']*project_id=(\d+)[^"']*)['"]/i);
+    const hrefMatch = tr.match(/href=["']([^"']{0,500}project_id=(\d+)[^"']{0,200})['"]/i);
     const projectId = hrefMatch ? hrefMatch[2] : externalId || "";
     const sourceUrl = projectId ? `${DETAIL_BASE}${projectId}` : LIST_URL;
 
     // Extract clean title text (may include anchor text)
-    const titleMatch = tr.match(/<a[^>]*>([\s\S]*?)<\/a>/i);
+    const titleMatch = tr.match(/<a[^>]{0,200}>([\s\S]{0,2000}?)<\/a>/i);
     const title = titleMatch
       ? titleMatch[1].replace(/<[^>]+>/g, " ").replace(/\s+/g, " ").trim()
       : rawTitle;

@@ -12,13 +12,18 @@ const recommendations = async (req, res) => {
   }
 };
 
+// Literal match: user input is never interpreted as a regular expression.
+const literalRegex = value => ({ $regex: value.replace(/[.*+?^${}()|[\]\\]/g, "\\$&"), $options: "i" });
+
 const fetch = async (req, res) => {
   try {
     const { search, category } = req.query;
+    if (search !== undefined && typeof search !== "string") return res.status(400).json({ error: "Invalid search" });
+    if (category !== undefined && typeof category !== "string") return res.status(400).json({ error: "Invalid category" });
 
     const query = {};
-    if (search) query.name = { $regex: search, $options: "i" };
-    if (category) query.category = { $regex: category, $options: "i" };
+    if (search) query.name = literalRegex(search);
+    if (category) query.category = literalRegex(category);
 
     const skills = await Skill.find(query).sort({ name: 1 });
     res.status(200).json(skills);

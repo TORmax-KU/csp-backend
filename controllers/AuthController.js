@@ -6,7 +6,9 @@ const MIN_PASSWORD_LENGTH = 8;
 // bcrypt ignores input past 72 bytes, so longer passwords would be silently truncated.
 const MAX_PASSWORD_BYTES = 72;
 const SELF_SERVICE_ROLES = ["Vendor", "JobLister"];
+const MAX_EMAIL_LENGTH = 254; // RFC 5321; also bounds input to the regex to avoid ReDoS
 const EMAIL_PATTERN = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
+const isValidEmail = value => typeof value === "string" && value.length <= MAX_EMAIL_LENGTH && EMAIL_PATTERN.test(value);
 // Compared against when no account exists so unknown emails take as long as wrong passwords.
 const DUMMY_HASH = bcrypt.hashSync("tormax-timing-equalizer", BCRYPT_ROUNDS);
 
@@ -40,7 +42,7 @@ const register = async (req, res) => {
     const realName = typeof req.body.realName === "string" ? req.body.realName.trim() : "";
     const role = req.body.role === undefined ? "Vendor" : req.body.role;
 
-    if (!EMAIL_PATTERN.test(email)) {
+    if (!isValidEmail(email)) {
       return res.status(400).json({ message: "A valid email is required" });
     }
     const passwordError = validatePassword(password);

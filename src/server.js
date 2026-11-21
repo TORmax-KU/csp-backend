@@ -23,6 +23,7 @@ app.use(
   })
 );
 app.use(express.json());
+app.use(require("./middleware/sanitizeInput"));
 
 app.use(session(sessionOptions({
   store: MongoStore.create({ mongoUrl: MONGO_URI, ttl: SESSION_IDLE_MS / 1000 }),

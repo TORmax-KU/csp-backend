@@ -14,7 +14,9 @@ const mongoose = require("mongoose");
 const bcrypt = require("bcryptjs");
 const User = require("../src/models/User");
 
+const MAX_EMAIL_LENGTH = 254; // RFC 5321; also bounds input to the regex to avoid ReDoS
 const EMAIL_PATTERN = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
+const isValidEmail = value => typeof value === "string" && value.length <= MAX_EMAIL_LENGTH && EMAIL_PATTERN.test(value);
 
 function parseArgs(argv) {
   const args = { create: false };
@@ -29,7 +31,7 @@ function parseArgs(argv) {
 (async () => {
   const { email: rawEmail, create } = parseArgs(process.argv.slice(2));
   const email = String(rawEmail || "").trim().toLowerCase();
-  if (!EMAIL_PATTERN.test(email)) throw new Error("Pass a valid --email");
+  if (!isValidEmail(email)) throw new Error("Pass a valid --email");
 
   await mongoose.connect(process.env.MONGO_URI || "mongodb://127.0.0.1:27017/fullstack_db");
   const existing = await User.findOne({ email });
