@@ -131,7 +131,6 @@ async function createPosting(req, res) {
     sourceSkillNames: skills.map(skill => skill.name),
     ...directPostingDefaults({ publisherId: req.user._id, now }),
   });
-  if (!project) return res.status(500).json({ error: "Server error while creating the posting" });
   const saved = await afterPostingSaved(project.toObject());
   res.status(201).json({ ...saved.toObject(), availability: availability(saved) });
 }

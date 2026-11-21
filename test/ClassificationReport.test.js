@@ -2,7 +2,7 @@ const test = require("node:test");
 const assert = require("node:assert/strict");
 const Project = require("../src/models/Project");
 const ClassificationReport = require("../src/models/ClassificationReport");
-const { reportClassification, reviewClassificationReport } = require("../controllers/ClassificationReportController");
+const { reportClassification, reviewClassificationReport, fetchClassificationReports } = require("../controllers/ClassificationReportController");
 
 const ID = "6ae0b63ffb773330336475e6";
 const response = () => ({ status(code) { this.statusCode = code; return this; }, json(body) { this.body = body; return this; } });
@@ -57,4 +57,25 @@ test("an admin can resolve a report and remove the TOR from the IT feed", async 
   const dismiss = response();
   await reviewClassificationReport({ params: { id: "6ae0b63ffb773330336475e7" }, user: { _id: "admin" }, body: { status: "dismissed", markNonSoftware: true } }, dismiss);
   assert.equal(dismiss.statusCode, 400);
+});
+
+test("admin queue rejects a status outside the ClassificationReport enum, including an injection attempt", async t => {
+  const res1 = response();
+  await fetchClassificationReports({ query: { status: "deleted" } }, res1);
+  assert.equal(res1.statusCode, 400);
+
+  const res2 = response();
+  await fetchClassificationReports({ query: { status: { $ne: "open" } } }, res2);
+  assert.equal(res2.statusCode, 400);
+});
+
+test("admin queue lists open reports by default, newest first", async t => {
+  const rows = [{ _id: "r1", status: "open" }];
+  const chain = { populate: () => chain, sort: () => chain, skip: () => chain, limit: () => chain, lean: async () => rows };
+  t.mock.method(ClassificationReport, "find", () => chain);
+  t.mock.method(ClassificationReport, "countDocuments", async () => 1);
+  const res = response();
+  await fetchClassificationReports({ query: {} }, res);
+  assert.equal(res.statusCode, 200);
+  assert.deepEqual(res.body, { reports: rows, total: 1, page: 1, limit: 20 });
 });
