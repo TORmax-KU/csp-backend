@@ -169,3 +169,110 @@ docs/            detailed documentation (below)
   email
 - [Admin console and moderation](docs/admin.md): admin setup, reports, removal,
   endpoints
+
+Percentage = unique matching mandatory skills / unique mandatory skills × 100.
+Pending/failed analysis, empty mandatory skills, or unmapped requirements produce
+`matchPercentage: null`, never a misleading 100%. New v2 skill names with a TOR
+quote, page and document index are normalized and added to the shared catalog.
+Names without evidence are not auto-created. Evidence is model-extracted, so review
+it against the PDF; it is not a guarantee of semantic correctness.
+An admin can also add skills through the existing Skills API;
+the match endpoint resolves the current catalog without another AI call. The stored
+`requiredSkills` snapshot updates on re-analysis. No user profile is sent to Vertex AI.
+
+### Source support and limits
+
+Automatic analysis can be disabled per project with `analysisAutoEligible=false`.
+The `skipped` state records deliberately excluded jobs, with an `analysisSkipReason`.
+New projects default to automatic eligibility. The worker skips known expired,
+awarded, cancelled, closed, or draft bids before loading documents or calling AI;
+an unknown deadline still requires extraction. Listing refreshes cannot re-enable
+an excluded backlog record. An explicit admin retry or
+`node scripts/repair-tor-analysis.js --apply --reanalyze PROJECT_ID` re-enables it,
+while deadline/status checks still apply.
+
+To prepare a limited batch with Vertex disabled, run
+`node scripts/select-recent-analysis.js --limit 20 --plan tmp/batch-UNIQUE_NAME.json`.
+Review that snapshot, then add `--apply` with the same `--plan` path. The snapshot
+preserves prior queue fields and exact selected IDs. Completed output is retained;
+only eligible selected records are queued. Keep the backend stopped during the
+preview/apply sequence; use a one-off Compose container with
+`-e VERTEX_AI_ENABLED=false` if its normal environment enables AI. See `lastest.md`
+for the batch already applied to this local database.
+
+Statuses distinguish `awaiting_documents` (missing TOR/scope), `needs_review`
+(document limits or malformed model output), `retry_pending` (temporary errors),
+and `failed` (permanent errors/exhausted retries). No-skills results are valid only
+with `aiAnalysis.noMandatorySkillsReason`. `aiAnalysis.skillEvidence` stores quotes
+and 1-based PDF page/document indexes in the order of `documentUrls`.
+
+Reclassify old failures without new AI calls:
+`node scripts/repair-tor-analysis.js --apply` (omit `--apply` for a preview).
+Add `--reanalyze PROJECT_ID` to explicitly queue one project using the v2 prompt;
+the running worker will call Vertex AI, incurring normal usage charges.
+
+Bangkok e-GP detail URLs are resolved through `ProjectTors/GetTorInProject`, falling
+back to relevant procurement announcements. Direct PDF URLs and HTML pages linking
+PDFs are also supported on explicitly configured `TOR_ALLOWED_HOSTS` (exact trusted
+public hostnames only; do not add internal services). Redirects are revalidated.
+HTML-only TORs, inaccessible documents, non-PDF files, and missing scope fail visibly.
+PDFs are sent in memory to Vertex AI and are not stored in MongoDB or on disk.
+
+Bangkok document resolution falls back to attachment filenames when the source
+omits announcement type labels. Winner/cancellation filenames cannot qualify as
+TOR documents. Official detail statuses C01 (contract/PO prepared), C04 (work
+delivered), and S5 (cancelled) exclude those records from open opportunities.
+The local `bangkok-documents` Postman simulation and
+`scripts/test-bangkok-documents-simulation.js` exercise these mappings and the
+document resolver over HTTP without paid AI calls.
+
+Limits: 5 attachments, 15 MiB per download, 20 MiB combined, 30-second source request
+timeout, 120-second AI timeout. Oversize sources fail rather than silently truncate.
+No automatic email delivery is included. Match is technical skill coverage, not
+procurement eligibility or a guarantee of suitability. The frontend can consume the
+summary and match endpoints; this change implements the backend pipeline.
+
+Run `npm test` for source, validation, worker and percentage regression checks.
+
+Official setup references: [Google Gen AI SDK](https://github.com/googleapis/js-genai)
+and [Vertex AI quickstart](https://cloud.google.com/vertex-ai/generative-ai/docs/start/quickstart).
+
+
+### National discovery providers
+
+Tero and GovSpending run on startup and every five minutes. Both apply a rolling
+**two calendar month publication cutoff in Asia/Bangkok**, including the cutoff
+and allowing future publication dates. Existing historical records are retained.
+
+Configure `TERO_API_KEY` and `GOVSPENDING_API_KEY` locally. For local testing only,
+`TERO_ALLOW_PUBLIC_DEV_KEY=true` retrieves the development key explicitly published
+in Tero's docs; production needs a dedicated provider key. The OpenD profile key
+belongs in `GOVSPENDING_API_KEY`. Never put keys into source URLs or commit `.env`.
+Individual flags are `TERO_INGESTION_ENABLED` and `GOVSPENDING_INGESTION_ENABLED`.
+
+Tero supplies document archives. GovSpending supplies metadata/contracts and
+resolves candidate documents through Tero by national project ID. Contract dates
+are never submission deadlines. Records from both providers merge on national
+identity. Missing or ambiguous PDF evidence stays off the public feed. Read
+`docs/procurement-source-evaluation.md` for live findings and coverage limits.
+
+With Vertex enabled and ADC mounted, the worker runs automatically, prioritizes
+newer publication dates, skips known terminal/expired bids, and retries rate limits.
+Monitor it with `docker compose exec -T backend node scripts/report-national-ingestion.js`.
+The recurring run continues while Docker is running. The Postman simulation is
+`postman/simulations/national-procurement.sim.yaml`; its companion context file
+contains the local verification commands.
+
+## Security scan (OWASP ZAP DAST)
+
+Run before each release against the local Docker stack, never against production.
+With the stack up (`docker compose up -d --build` from the root), run from `csp-backend`:
+
+```powershell
+.\security\zap\run-zap.ps1
+```
+
+The script runs ZAP's API scan (`zap-api-scan.py`) on the public endpoints listed in
+`security/zap/openapi-public.yaml`. It does a passive check plus an active attack
+scan, which sends real login/register requests, so it may leave test data in your local database.
+The report is saved to `security/zap/reports/zap-backend-report.html`, which is gitignored.

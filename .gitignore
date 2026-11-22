@@ -4,3 +4,5 @@ node_modules
 *service-account*.json
 tmp/
 coverage.lcov
+gitleaks-report.json
+security/zap/reports/
