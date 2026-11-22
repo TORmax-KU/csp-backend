@@ -452,3 +452,17 @@ Monitor it with `docker compose exec -T backend node scripts/report-national-ing
 The recurring run continues while Docker is running. The Postman simulation is
 `postman/simulations/national-procurement.sim.yaml`; its companion context file
 contains the local verification commands.
+
+## Security scan (OWASP ZAP DAST)
+
+Run before each release against the local Docker stack, never against production.
+With the stack up (`docker compose up -d --build` from the root), run from `csp-backend`:
+
+```powershell
+.\security\zap\run-zap.ps1
+```
+
+The script runs ZAP's API scan (`zap-api-scan.py`) on the public endpoints listed in
+`security/zap/openapi-public.yaml`. It does a passive check plus an active attack
+scan, which sends real login/register requests, so it may leave test data in your local database.
+The report is saved to `security/zap/reports/zap-backend-report.html`, which is gitignored.
