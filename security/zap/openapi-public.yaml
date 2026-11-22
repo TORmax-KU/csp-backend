@@ -1,0 +1,73 @@
+openapi: 3.0.3
+info:
+  title: TORmax backend - public endpoints for OWASP ZAP
+  version: "1.0"
+  description: >
+    Minimal spec used only by security/zap/run-zap.ps1 so ZAP knows which
+    unauthenticated endpoints and parameters to scan. Not a full API reference.
+servers:
+  - url: http://localhost:5000
+paths:
+  /auth/options:
+    get:
+      responses: { "200": { description: Login options } }
+  /auth/me:
+    get:
+      responses: { "200": { description: Current session user or null } }
+  /auth/login:
+    post:
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                email: { type: string, example: zap-scan@example.com }
+                password: { type: string, example: ZapScan#2026pass }
+      responses: { "200": { description: Logged in }, "401": { description: Invalid credentials } }
+  /auth/register:
+    post:
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                email: { type: string, example: zap-scan@example.com }
+                password: { type: string, example: ZapScan#2026pass }
+                realName: { type: string, example: ZAP Scanner }
+                role: { type: string, example: Vendor }
+      responses: { "201": { description: Registered }, "400": { description: Validation error } }
+  /api/projects:
+    get:
+      parameters:
+        - { name: search, in: query, schema: { type: string, example: software } }
+        - { name: skill, in: query, schema: { type: string, example: React } }
+        - { name: agency, in: query, schema: { type: string, example: Bangkok } }
+        - { name: method, in: query, schema: { type: string, example: e-bidding } }
+        - { name: sort, in: query, schema: { type: string, example: newest } }
+        - { name: page, in: query, schema: { type: integer, example: 1 } }
+        - { name: limit, in: query, schema: { type: integer, example: 10 } }
+      responses: { "200": { description: Project list } }
+  /api/projects/{id}:
+    get:
+      parameters:
+        - { name: id, in: path, required: true, schema: { type: string, example: 000000000000000000000000 } }
+      responses: { "200": { description: Project }, "404": { description: Not found } }
+  /api/skills:
+    get:
+      parameters:
+        - { name: search, in: query, schema: { type: string, example: java } }
+        - { name: category, in: query, schema: { type: string, example: Software } }
+      responses: { "200": { description: Skill list } }
+  /api/skills/recommendations:
+    get:
+      responses: { "200": { description: Recommended skills } }
+  /api/bookmarks:
+    get:
+      responses: { "401": { description: Requires login (checks the auth guard) } }
+  /api/admin/posts:
+    get:
+      responses: { "401": { description: Requires admin (checks the auth guard) } }
