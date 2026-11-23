@@ -12,6 +12,10 @@ const app = express();
 
 const PORT = process.env.PORT || 5001;
 
+// Hosts such as Render put a proxy in front of the app. Trusting one hop lets Express read the
+// original protocol (X-Forwarded-Proto), which the secure session cookie requires.
+if (process.env.NODE_ENV === "production") app.set("trust proxy", 1);
+
 const MONGO_URI =
   process.env.MONGO_URI ||
   "mongodb://127.0.0.1:27017/fullstack_db";

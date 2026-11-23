@@ -67,3 +67,8 @@ test("production refuses to start without a session secret", () => {
   assert.throws(() => sessionOptions({ store: null, env: { NODE_ENV: "production" } }), /SESSION_SECRET/);
   assert.equal(sessionOptions({ store: null, env: { SESSION_SECRET: "x" } }).cookie.maxAge, 2 * 60 * MINUTE);
 });
+
+test("the session cookie is HTTPS-only in production", () => {
+  assert.equal(sessionOptions({ store: null, env: { SESSION_SECRET: "x", NODE_ENV: "production" } }).cookie.secure, true);
+  assert.equal(sessionOptions({ store: null, env: { SESSION_SECRET: "x" } }).cookie.secure, false);
+});

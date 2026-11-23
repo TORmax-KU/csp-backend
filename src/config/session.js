@@ -28,6 +28,9 @@ function sessionOptions({ store, env = process.env }) {
       maxAge: SESSION_IDLE_MS,
       httpOnly: true,
       sameSite: "lax",
+      // HTTPS-only when hosted. Needs `trust proxy` (server.js), because the host's proxy ends
+      // HTTPS and the app itself sees plain HTTP.
+      secure: env.NODE_ENV === "production",
     },
   };
 }

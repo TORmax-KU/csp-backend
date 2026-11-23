@@ -85,6 +85,7 @@ touch:
 | `MONGO_URI` | `mongodb://mongo:27017/fullstack_db` | Database. Use `127.0.0.1` instead of `mongo` outside Docker |
 | `FRONTEND_URL` | `http://localhost:3000` | Website address, used for CORS, redirects and email links |
 | `SESSION_SECRET` | *(blank)* | Signs login sessions. If blank, sessions reset when the backend restarts. Required in production |
+| `NODE_ENV` | *(blank)* | Set to `production` when hosted: makes the login cookie HTTPS-only and trusts the host's proxy. See [hosting](https://github.com/TORmax-KU/TORmax#hosting-vercel--render) |
 | `INGESTION_ENABLED` | `true` | Set to `false` to stop all source imports ([details](docs/data-sources.md)) |
 | `MATCHING_ENABLED` | `true` | Vendor matching sweep ([details](docs/matching-and-alerts.md)) |
 | `VERTEX_AI_ENABLED` | `false` | AI analysis of TOR PDFs ([details](docs/vertex-ai.md)) |
