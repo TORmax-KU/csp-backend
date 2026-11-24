@@ -116,4 +116,4 @@ async function loadTor(sourceUrl, knownDocuments = [], { fetchImpl = fetch } = {
   return documents;
 }
 
-module.exports = { loadTor, checkedUrl, attachmentUrl };
+module.exports = { loadTor, checkedUrl, attachmentUrl, download };

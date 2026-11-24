@@ -9,6 +9,7 @@ const { validatePosting, directPostingDefaults } = require("../src/services/Dire
 const { findOrCreateSkill } = require("../src/services/SkillCatalog");
 const { assessProject } = require("../src/services/PriceAnalysis");
 const { requestMatching } = require("../src/services/MatchingEngine");
+const { archivedPdf, contentDisposition } = require("../src/services/SourceDocument");
 
 const PUBLISHER_FIELDS = "username realName companyName";
 
@@ -65,6 +66,33 @@ const fetchById = async (req, res) => {
   } catch (error) {
     console.error("Fetch project error:", error);
     res.status(500).json({ error: "Server error while fetching project" });
+  }
+};
+
+// Opens one archived source PDF (e.g. Attach_TOR_1.pdf inside the Tero ZIP) instead of the whole ZIP.
+const fetchDocument = async (req, res) => {
+  const notFound = () => res.status(404).json({ message: "Document not found" });
+  try {
+    const index = Number(req.params.index);
+    if (!/^[a-f\d]{24}$/i.test(req.params.id) || !/^\d{1,2}$/.test(req.params.index)) return notFound();
+    const project = await Project.findById(req.params.id).select("status documents").lean();
+    if (!project || !["Public", "Draft"].includes(project.status)) return notFound();
+    const document = project.documents?.[index];
+    const pdf = document?.url && await archivedPdf(document.url);
+    if (!pdf) return notFound();
+    res.set({
+      "Content-Type": "application/pdf",
+      "Content-Disposition": contentDisposition(pdf.fileName),
+      "Content-Length": String(pdf.bytes.length),
+      "Cache-Control": "public, max-age=600",
+      "X-Content-Type-Options": "nosniff",
+    });
+    res.status(200).end(pdf.bytes);
+  } catch (error) {
+    if (error.code === "BUSY") return res.status(503).set("Retry-After", "10").json({ message: "Document service is busy; try again shortly" });
+    if (error.code === "NO_TOR_DOCUMENT") return notFound();
+    console.error("Fetch source document error:", error.message);
+    res.status(502).json({ message: "Could not retrieve the document from the source" });
   }
 };
 
@@ -211,4 +239,4 @@ const deleteProject = async (req, res) => {
   }
 };
 
-module.exports = { fetch, fetchById, fetchMine, create, update, deleteProject };
+module.exports = { fetch, fetchById, fetchDocument, fetchMine, create, update, deleteProject };

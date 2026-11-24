@@ -42,6 +42,7 @@ const toProjectDocument = (record, source, sourceUrl, classification) => {
     externalId: String(record.externalId || record.id || "").trim(),
     sourceStatus: record.sourceStatus || record.status,
     procurementMethod: record.procurementMethod,
+    referencePrice: record.referencePrice,
     listingAnnouncedAt: record.listingAnnouncedAt ? require('./RecentProcurementWindow').publicationDate(record.listingAnnouncedAt) : undefined,
     nationalProjectId: record.nationalProjectId,
     classification: "software",
@@ -96,7 +97,8 @@ const ingestRecords = async ({
       if (existing) {
         // Budget/dates are owned by PDF extraction, never by listing scrapers. Draft status is set
         // below from explicit evidence only, so a listing without status never undoes a draft.
-        const { publisherId, budget, deadline, procurementStatus, documents, dataVerified, sourceVerifiedAt, status, ...updateFields } = project;
+        // The listing ราคากลาง is recorded only when a project is first ingested.
+        const { publisherId, budget, deadline, procurementStatus, documents, dataVerified, sourceVerifiedAt, status, referencePrice, ...updateFields } = project;
         if (project.nationalProjectId) {
           updateFields.source = existing.source;
           updateFields.rawData = { ...existing.rawData, ...project.rawData };

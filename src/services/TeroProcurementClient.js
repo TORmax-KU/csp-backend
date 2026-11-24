@@ -15,6 +15,11 @@ async function apiKey(fetchImpl, env) {
   }
   return publicDevKey;
 }
+// A published ราคากลาง; zero or blank means the listing has none.
+const positiveAmount = value => {
+  const amount = typeof value === 'string' ? Number(value.replace(/,/g, '').trim() || NaN) : Number(value);
+  return Number.isFinite(amount) && amount > 0 ? amount : undefined;
+};
 function toRecord(row) {
   const id = String(row.project_id || '');
   if (!/^\d{11}$/.test(id) || row.source !== 'gprocurement') return null;
@@ -22,6 +27,7 @@ function toRecord(row) {
     agency: row.agency_full || row.agency, sourceStatus: row.status,
     sourceUrl: `${ORIGIN}/announcements/gprocurement/${id}`,
     procurementMethod: row.procurement_method, listingAnnouncedAt: row.announce_date,
+    referencePrice: positiveAmount(row.central_price),
     rawData: { tero: row } };
 }
 async function fetchListings({ fetchImpl = fetch, env = process.env, now = new Date(), keywords = ['ซอฟต์แวร์', 'ระบบสารสนเทศ', 'พัฒนาระบบ', 'เว็บไซต์', 'แอปพลิเคชัน', 'คอมพิวเตอร์', 'เครือข่าย', 'software'] } = {}) {
@@ -49,4 +55,4 @@ async function fetchListings({ fetchImpl = fetch, env = process.env, now = new D
   }
   return { source: SOURCE, sourceUrl: `${ORIGIN}/announcements`, records: [...records.values()] };
 }
-module.exports = { fetchListings, toRecord, SOURCE, ORIGIN };
+module.exports = { fetchListings, toRecord, positiveAmount, SOURCE, ORIGIN };
