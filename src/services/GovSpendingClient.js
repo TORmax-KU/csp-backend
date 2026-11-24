@@ -1,5 +1,6 @@
 const { recentWindow, isRecentPublication } = require('./RecentProcurementWindow');
 const { fetchSource } = require('./SourceFetch');
+const { positiveAmount } = require('./TeroProcurementClient');
 const SOURCE = 'govspending';
 const ENDPOINT = 'https://opend.data.go.th/govspending/service/egp-contract';
 function toRecord(row) {
@@ -12,6 +13,8 @@ function toRecord(row) {
     agency: row.dept_sub_name || row.dept_name,
     sourceStatus: contracted ? 'awarded' : String(row.project_status || 'unknown'),
     procurementMethod: row.purchase_method_name, listingAnnouncedAt: row.announce_date,
+    // price_build is the e-GP ราคากลาง.
+    referencePrice: positiveAmount(row.price_build),
     // Document resolution is independently verified through Tero; never persist an authenticated API URL.
     sourceUrl: `https://run-procurement.terodigital.com/announcements/gprocurement/${id}`,
     rawData: { govspending: { ...safe, hasContract: contracted, endpoint: ENDPOINT } } };

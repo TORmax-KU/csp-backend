@@ -1,5 +1,7 @@
 const { analysisError } = require("./AnalysisErrors");
 const FIELDS = ["budget", "announcedAt", "deadline"];
+// Extracted when printed, but never required for a complete analysis.
+const OPTIONAL_FIELDS = ["referencePrice"];
 const evidenceSchema = { type: "OBJECT", nullable: true, required: ["quote", "page", "documentIndex"], properties: {
   quote: { type: "STRING" }, page: { type: "INTEGER" }, documentIndex: { type: "INTEGER" },
 } };
@@ -8,10 +10,20 @@ const dateSchema = { type: "OBJECT", required: ["status", "reason", "evidence", 
   ...common, day: { type: "INTEGER", nullable: true }, month: { type: "INTEGER", nullable: true }, year: { type: "INTEGER", nullable: true },
   calendar: { type: "STRING", enum: ["BE", "CE"], nullable: true }, time: { type: "STRING", nullable: true },
 } };
-const metadataSchema = { type: "OBJECT", required: FIELDS, properties: {
-  budget: { type: "OBJECT", required: ["status", "reason", "evidence", "amountTHB"], properties: { ...common, amountTHB: { type: "NUMBER", nullable: true } } },
+const amountSchema = { type: "OBJECT", required: ["status", "reason", "evidence", "amountTHB"], properties: { ...common, amountTHB: { type: "NUMBER", nullable: true } } };
+const metadataSchema = { type: "OBJECT", required: [...FIELDS, ...OPTIONAL_FIELDS], properties: {
+  budget: amountSchema, referencePrice: amountSchema,
   announcedAt: dateSchema, deadline: dateSchema,
 } };
+const AMOUNT_LABELS = { budget: /วงเงิน|งบประมาณ|budget/i, referencePrice: /ราคากลาง|ราคาอ้างอิง|reference price|median price/i };
+
+function quotedAmount(name, input, quote) {
+  if (!Number.isFinite(input.amountTHB) || input.amountTHB <= 0 || input.amountTHB > 1e13) throw new Error(`Invalid THB ${name}`);
+  if (!AMOUNT_LABELS[name].test(quote)) throw new Error(name === "budget" ? "Quote does not identify a project budget" : "Quote does not identify a reference price (ราคากลาง)");
+  const amounts = quote.replace(/,/g, "").match(/\d+(?:\.\d+)?/g) || [];
+  if (!amounts.some(amount => Math.abs(Number(amount) - input.amountTHB) < 0.005 || (/ล้าน|million/i.test(quote) && Math.abs(Number(amount) * 1e6 - input.amountTHB) < 0.005))) throw new Error(`${name === "budget" ? "Budget" : "Reference price"} is not supported by the quoted amount`);
+  return input.amountTHB;
+}
 const digits = value => String(value).replace(/[๐-๙]/g, c => String(c.charCodeAt(0) - 0x0e50));
 
 function validEvidence(evidence, count) {
@@ -52,10 +64,11 @@ function normalizeDate(field, evidence, now) {
 
 function validateMetadata(metadata, documentCount, now = new Date()) {
   if (!metadata || FIELDS.some(name => !metadata[name])) throw analysisError("INVALID_AI_RESPONSE", "Budget and date extraction results are required");
-  const values = { budget: null, announcedAt: null, deadline: null, deadlinePrecision: "unknown" };
+  const values = { budget: null, referencePrice: null, announcedAt: null, deadline: null, deadlinePrecision: "unknown" };
   const fields = {};
-  for (const name of FIELDS) {
-    const input = metadata[name];
+  for (const name of [...FIELDS, ...OPTIONAL_FIELDS]) {
+    // Older responses (and tests) may omit an optional field entirely.
+    const input = metadata[name] || { status: "not_found", reason: "Not extracted" };
     if (!["found", "not_found", "ambiguous"].includes(input.status) || typeof input.reason !== "string" || input.reason.length > 2000) throw analysisError("INVALID_AI_RESPONSE", `Invalid ${name} extraction status`);
     fields[name] = { status: input.status, reason: input.reason, evidence: null };
     if (input.status !== "found") {
@@ -65,12 +78,8 @@ function validateMetadata(metadata, documentCount, now = new Date()) {
     try {
       if (!validEvidence(input.evidence, documentCount)) throw new Error("Missing valid quote, page or document index");
       const quote = digits(input.evidence.quote);
-      if (name === "budget") {
-        if (!Number.isFinite(input.amountTHB) || input.amountTHB <= 0 || input.amountTHB > 1e13) throw new Error("Invalid THB budget");
-        if (!/วงเงิน|งบประมาณ|budget/i.test(quote)) throw new Error("Quote does not identify a project budget");
-        const amounts = quote.replace(/,/g, "").match(/\d+(?:\.\d+)?/g) || [];
-        if (!amounts.some(amount => Math.abs(Number(amount) - input.amountTHB) < 0.005 || (/ล้าน|million/i.test(quote) && Math.abs(Number(amount) * 1e6 - input.amountTHB) < 0.005))) throw new Error("Budget is not supported by the quoted amount");
-        values.budget = input.amountTHB;
+      if (AMOUNT_LABELS[name]) {
+        values[name] = quotedAmount(name, input, quote);
       } else {
         const cues = name === "announcedAt" ? /ประกาศ|เผยแพร่|publish|announce/i : /ยื่น|เสนอราคา|submission|deadline|bid/i;
         if (!cues.test(quote)) throw new Error("Quote does not identify the requested date event");
@@ -89,7 +98,7 @@ function validateMetadata(metadata, documentCount, now = new Date()) {
     fields.deadline.status = "ambiguous";
     fields.deadline.reason = "Submission deadline precedes announcement publication date";
   }
-  return { values, fields, needsReview: Object.values(fields).some(field => field.status === "ambiguous") };
+  return { values, fields, needsReview: FIELDS.some(name => fields[name].status === "ambiguous") };
 }
 
-module.exports = { metadataSchema, validateMetadata };
+module.exports = { metadataSchema, validateMetadata, OPTIONAL_FIELDS };

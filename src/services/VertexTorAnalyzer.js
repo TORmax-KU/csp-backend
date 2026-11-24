@@ -1,7 +1,7 @@
 const { analysisError } = require("./AnalysisErrors");
-const { metadataSchema, validateMetadata } = require("./TorMetadata");
+const { metadataSchema, validateMetadata, OPTIONAL_FIELDS } = require("./TorMetadata");
 const SYSTEM_INSTRUCTION = require("./TorExtractionPrompt");
-const PROMPT_VERSION = "tor-pdf-v5-shared-skills";
+const PROMPT_VERSION = "tor-pdf-v6-reference-price";
 
 function validateAnalysis(value, documentCount = 5) {
   if (!value || typeof value.hasTorContent !== "boolean" || typeof value.descriptions !== "string" ||
@@ -111,10 +111,10 @@ async function analyzeTor(documents, skillNames, context = {}, options = {}) {
         field.status = "ambiguous"; field.reason = issue;
         parsed.metadata.values[name] = null;
         if (name === "deadline") parsed.metadata.values.deadlinePrecision = "unknown";
-        parsed.metadata.needsReview = true;
+        if (!OPTIONAL_FIELDS.includes(name)) parsed.metadata.needsReview = true;
       }
     }
-    const corrections = Object.entries(parsed.metadata.fields).filter(([name, field]) => field.status === "ambiguous" && value.metadata[name].status === "found").map(([name, field]) => ({ field: name, problem: field.reason, quote: field.evidence?.quote }));
+    const corrections = Object.entries(parsed.metadata.fields).filter(([name, field]) => field.status === "ambiguous" && value.metadata[name]?.status === "found").map(([name, field]) => ({ field: name, problem: field.reason, quote: field.evidence?.quote }));
     if (!attempt && corrections.length) {
       request.contents[0].parts.push({ text: `Re-read the PDFs and correct these validation failures: ${JSON.stringify(corrections)}. Return the full schema again. For date evidence quote the COMPLETE sentence including the preceding event words (such as ผู้ประสงค์จะเสนอราคาต้องยื่นข้อเสนอ), date, year and final time; date fragments alone are insufficient. Do not invent evidence to pass validation. If unsupported return not_found or ambiguous with null values.` });
       continue;

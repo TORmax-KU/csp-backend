@@ -1,7 +1,7 @@
 const express = require("express");
 const router = express.Router();
 
-const { fetch, fetchById, fetchMine, create, update, deleteProject } = require("../../controllers/ProjectController");
+const { fetch, fetchById, fetchDocument, fetchMine, create, update, deleteProject } = require("../../controllers/ProjectController");
 const isAuthenticated = require("../middleware/isAuthenticated");
 const { queueAnalysis, matchSkills } = require("../../controllers/TorAnalysisController");
 const { reportPost } = require("../../controllers/PostReportController");
@@ -10,6 +10,7 @@ const { reportClassification } = require("../../controllers/ClassificationReport
 router.get("/", fetch);
 router.get("/mine", isAuthenticated, fetchMine);
 router.get("/:id", fetchById);
+router.get("/:id/documents/:index", fetchDocument);
 router.get("/:id/match", isAuthenticated, matchSkills);
 router.post("/:id/analyze", isAuthenticated, queueAnalysis);
 router.post("/:id/classification-report", isAuthenticated, reportClassification);

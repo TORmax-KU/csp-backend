@@ -53,6 +53,8 @@ async function processNext({ projects = Project, skills = Skill, load = loadTor,
       analysis.metadata.needsReview || !requiredFieldsFound ? "needs_review" : "completed";
     await projects.updateOne(filter, { $set: {
       budget: values.budget,
+      // A ราคากลาง published by the source listing takes precedence over the TOR reading.
+      ...(values.referencePrice != null && project.referencePrice == null ? { referencePrice: values.referencePrice } : {}),
       ...(['tero-procurement', 'govspending'].includes(project.source) ? {
         dataVerified: true, sourceVerifiedAt: analyzedAt, documentCheckedAt: analyzedAt,
         documents: documents.map(d => ({ title: d.title || 'TOR PDF', url: d.url, kind: d.kind || 'tor', verifiedAt: analyzedAt,
@@ -75,7 +77,7 @@ async function processNext({ projects = Project, skills = Skill, load = loadTor,
     } });
     // Match and price it now instead of waiting for the next sweeps.
     if (status === "completed") onCompleted();
-    console.log(`TOR analysis ${status}: ${project._id}; budget=${analysis.metadata.fields.budget.status}, publication=${analysis.metadata.fields.announcedAt.status}, deadline=${analysis.metadata.fields.deadline.status}`);
+    console.log(`TOR analysis ${status}: ${project._id}; budget=${analysis.metadata.fields.budget.status}, referencePrice=${analysis.metadata.fields.referencePrice?.status || "not_found"}, publication=${analysis.metadata.fields.announcedAt.status}, deadline=${analysis.metadata.fields.deadline.status}`);
   } catch (error) {
     const failure = classifyAnalysisError(error);
     const retries = project.analysisRetryCount || 0;
